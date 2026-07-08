@@ -8,8 +8,8 @@
 PwmController::PwmController(uint8_t pin, uint8_t channel) : _pin(pin), _channel(channel) {}
 
 void PwmController::begin() {
-    ledcSetup(_channel, PWM_FREQ, PWM_RES);
-    ledcAttachPin(_pin, _channel);
+    // New ESP32 LEDC API (Core 3.0+)
+    ledcAttach(_pin, PWM_FREQ, PWM_RES);
 }
 
 void PwmController::update(uint16_t crsfValue) {
@@ -21,5 +21,5 @@ void PwmController::update(uint16_t crsfValue) {
     // Duty = (PulseWidth / Period) * (2^Resolution - 1)
     // Period = 1,000,000 / Frequency = 20,000 us
     uint32_t duty = (pwm_us * ((1 << PWM_RES) - 1)) / 20000;
-    ledcWrite(_channel, duty);
+    ledcWrite(_pin, duty);
 }

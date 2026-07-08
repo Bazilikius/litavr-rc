@@ -8,7 +8,7 @@
 
 // Configuration
 #define CRSF_SERIAL Serial2
-#define CRSF_BAUDRATE 420000
+#define CRSF_BAUDRATE 400000
 #define RX_PIN 16
 #define TX_PIN 17
 #define PWM_PIN 13
