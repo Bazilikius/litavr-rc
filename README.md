@@ -47,3 +47,12 @@ In `crsf_switch.ino`, you can adjust the following parameters:
 - `crsf_switch.ino`: Main Arduino sketch.
 - `CrsfParser.h` / `.cpp`: Handles protocol synchronization and data extraction.
 - `PwmController.h` / `.cpp`: Manages ESP32 hardware PWM timing.
+
+## Troubleshooting Upload Errors
+
+If you see `Failed to communicate with the flash chip` or `Packet content transfer stopped`:
+
+1.  **Disconnect Hardware**: Unplug the RC Receiver and RC Switch from the ESP32 while flashing. The data from the receiver on the RX pin can interfere with the bootloader.
+2.  **Lower Upload Speed**: In Arduino IDE, go to `Tools -> Upload Speed` and change it to `115200`.
+3.  **Manual Boot Mode**: Hold the 'BOOT' button on the ESP32 board while the IDE says 'Connecting...'.
+4.  **Pin Conflicts**: If you are using an ESP32-WROVER module, pins 16 and 17 are reserved for internal PSRAM. Change `RX_PIN` and `TX_PIN` in `crsf_switch.ino` to `25` and `26` respectively.
