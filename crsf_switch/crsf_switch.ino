@@ -7,11 +7,11 @@
 #include "PwmController.h"
 
 // Configuration
-#define CRSF_SERIAL Serial2
+#define CRSF_SERIAL Serial1
 #define CRSF_BAUDRATE 400000
-#define RX_PIN 16
-#define TX_PIN 17
-#define PWM_PIN 13
+#define RX_PIN 2
+#define TX_PIN 3
+#define PWM_PIN 4
 #define LEDC_CHANNEL 0
 #define TARGET_CHANNEL 15 // 1-indexed
 
