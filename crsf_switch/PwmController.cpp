@@ -20,6 +20,7 @@ void PwmController::update(uint16_t crsfValue) {
     // Convert microseconds to LEDC duty cycle
     // Duty = (PulseWidth / Period) * (2^Resolution - 1)
     // Period = 1,000,000 / Frequency = 20,000 us
-    uint32_t duty = (pwm_us * ((1 << PWM_RES) - 1)) / 20000;
+    // Using 65535 for 16-bit resolution
+    uint32_t duty = (pwm_us * 65535) / 20000;
     ledcWrite(_pin, duty);
 }
