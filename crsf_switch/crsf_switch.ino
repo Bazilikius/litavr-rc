@@ -1,5 +1,5 @@
 /*
- * CRSF to PWM Switch Controller for ESP32
+ * CRSF to PWM Switch Controller for ESP32-C3 Super Mini
  * Listens to Channel 15 from CRSF stream and controls a PWM output.
  */
 
@@ -13,37 +13,51 @@
 #define TX_PIN 7
 #define PWM_PIN 10
 #define LEDC_CHANNEL 0
-#define TARGET_CHANNEL 15 // 1-indexed
+#define TARGET_CHANNEL 15
 
 CrsfParser parser;
 PwmController controller(PWM_PIN, LEDC_CHANNEL);
 
 void setup() {
+  // Built-in USB Serial for debugging
   Serial.begin(115200);
-  Serial.println("Starting CRSF to PWM Switch Controller...");
+  delay(2000);
+  Serial.println("\n--- ESP32-C3 CRSF to PWM Start ---");
+  Serial.printf("Config: RX=%d, TX=%d, PWM=%d, Baud=%d\n", RX_PIN, TX_PIN, PWM_PIN, CRSF_BAUDRATE);
 
-  // Initialize CRSF Serial
+  // Initialize Hardware UART for CRSF
   CRSF_SERIAL.begin(CRSF_BAUDRATE, SERIAL_8N1, RX_PIN, TX_PIN);
 
   // Initialize PWM Controller
   controller.begin();
+  Serial.println("System Ready.");
 }
+
+uint32_t byteCount = 0;
+uint32_t packetCount = 0;
+uint32_t lastReport = 0;
 
 void loop() {
   while (CRSF_SERIAL.available()) {
     uint8_t b = CRSF_SERIAL.read();
+    byteCount++;
+
     if (parser.processByte(b)) {
-      // Valid RC packet received
+      packetCount++;
       uint16_t ch15 = parser.getChannel(TARGET_CHANNEL - 1);
       controller.update(ch15);
-
-      // Debugging: blink internal LED (GPIO 8 on many C3 Super Minis) or print
-      static uint32_t lastPrint = 0;
-      if (millis() - lastPrint > 1000) {
-        Serial.print("CRSF OK - Ch15: ");
-        Serial.println(ch15);
-        lastPrint = millis();
-      }
     }
+  }
+
+  // Periodic diagnostic report every 2 seconds
+  if (millis() - lastReport > 2000) {
+    if (byteCount == 0) {
+      Serial.println("WARNING: No data received on RX pin. Check wiring!");
+    } else {
+      uint16_t currentCh15 = parser.getChannel(TARGET_CHANNEL - 1);
+      Serial.printf("Stats: Bytes Recv: %u, RC Packets: %u, Ch15: %u\n",
+                    byteCount, packetCount, currentCh15);
+    }
+    lastReport = millis();
   }
 }

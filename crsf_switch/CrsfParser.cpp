@@ -21,7 +21,7 @@ static const uint8_t crsf_crc8tab[256] = {
 
 CrsfParser::CrsfParser() : _bufferIndex(0) {
     for (int i = 0; i < 16; i++) {
-        _channels[i] = 992; // Default center
+        _channels[i] = 992;
     }
 }
 
@@ -34,39 +34,74 @@ uint8_t CrsfParser::_crc8(const uint8_t *ptr, uint8_t len) {
 }
 
 bool CrsfParser::processByte(uint8_t byte) {
-    if (_bufferIndex == 0) {
-        // Sync byte
-        if (byte == 0xC8 || byte == 0xEA || byte == 0xEE || byte == 0xEC || byte == 0xEB || byte == 0x00) {
-            _buffer[_bufferIndex++] = byte;
+    if (_bufferIndex < CRSF_MAX_PACKET_LEN) {
+        _buffer[_bufferIndex++] = byte;
+    } else {
+        // Buffer overflow, shift left and append
+        for (int i = 0; i < CRSF_MAX_PACKET_LEN - 1; i++) {
+            _buffer[i] = _buffer[i + 1];
         }
-        return false;
+        _buffer[CRSF_MAX_PACKET_LEN - 1] = byte;
     }
 
-    _buffer[_bufferIndex++] = byte;
+    // Try to find a valid frame in the current buffer
+    while (_bufferIndex >= 3) {
+        uint8_t sync = _buffer[0];
+        // Valid sync: Broadcast (0x00) or Device addresses (0xC8, 0xEA, 0xEE, etc.)
+        if (sync != 0xC8 && sync != 0xEA && sync != 0xEE && sync != 0xEC && sync != 0xEB && sync != 0x00) {
+            // Shift buffer left to find next sync
+            for (int i = 0; i < _bufferIndex - 1; i++) {
+                _buffer[i] = _buffer[i+1];
+            }
+            _bufferIndex--;
+            continue;
+        }
 
-    if (_bufferIndex == 2) {
         uint8_t len = _buffer[1];
         if (len < 2 || len > 62) {
-            _bufferIndex = 0;
-        }
-        return false;
-    }
-
-    if (_bufferIndex >= _buffer[1] + 2) {
-        uint8_t type = _buffer[2];
-        uint8_t expectedCrc = _buffer[_bufferIndex - 1];
-        uint8_t actualCrc = _crc8(&_buffer[2], _bufferIndex - 3);
-
-        bool success = false;
-        if (actualCrc == expectedCrc) {
-            if (type == 0x16) {
-                _unpackChannels(&_buffer[3]);
-                success = true;
+            // Invalid length, shift
+            for (int i = 0; i < _bufferIndex - 1; i++) {
+                _buffer[i] = _buffer[i+1];
             }
+            _bufferIndex--;
+            continue;
         }
 
-        _bufferIndex = 0;
-        return success;
+        if (_bufferIndex < (len + 2)) {
+            // Need more data
+            return false;
+        }
+
+        // Potential frame complete
+        uint8_t type = _buffer[2];
+        uint8_t expectedCrc = _buffer[len + 1];
+        uint8_t actualCrc = _crc8(&_buffer[2], len - 1);
+
+        if (actualCrc != expectedCrc) {
+            // CRC mismatch, shift and retry
+            for (int i = 0; i < _bufferIndex - 1; i++) {
+                _buffer[i] = _buffer[i+1];
+            }
+            _bufferIndex--;
+            continue;
+        }
+
+        // VALID FRAME FOUND
+        bool success = false;
+        if (type == 0x16) { // RC_CHANNELS_PACKED
+            _unpackChannels(&_buffer[3]);
+            success = true;
+        }
+
+        // Consume the frame
+        uint8_t totalLen = len + 2;
+        for (int i = 0; i < _bufferIndex - totalLen; i++) {
+            _buffer[i] = _buffer[i + totalLen];
+        }
+        _bufferIndex -= totalLen;
+
+        if (success) return true;
+        // If it was a valid frame but not RC_CHANNELS, continue searching the remaining buffer
     }
 
     return false;
