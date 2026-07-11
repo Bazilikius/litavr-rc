@@ -8,6 +8,7 @@ public:
     PwmController(uint8_t pin, uint8_t channel);
     void begin();
     void update(uint16_t crsfValue);
+    void writeMicros(uint32_t us);
 
 private:
     uint8_t _pin;
