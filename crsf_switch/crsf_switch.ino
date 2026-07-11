@@ -11,7 +11,7 @@
 #define CRSF_BAUDRATE 400000
 #define RX_PIN 6
 #define TX_PIN 7
-#define PWM_PIN 10
+#define PWM_PIN 5
 #define LEDC_CHANNEL 0
 #define TARGET_CHANNEL 15
 

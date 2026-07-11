@@ -8,7 +8,7 @@ This project implements a CRSF (TBS Crossfire) protocol parser for the **ESP32-C
 | --- | --- | --- | --- |
 | CRSF RX (From Receiver TX) | GPIO 6 | 6 | Serial1 RX |
 | CRSF TX (To Receiver RX) | GPIO 7 | 7 | Serial1 TX |
-| RC Switch PWM Output | GPIO 10 | 10 | PWM Signal |
+| RC Switch PWM Output | GPIO 5 | 5 | PWM Signal |
 | GND | GND | GND | Common Ground |
 | 5V / VCC | 5V | 5V | Power for ESP32 and Receiver |
 
