@@ -8,9 +8,9 @@
 PwmController::PwmController(uint8_t pin, uint8_t channel) : _pin(pin), _channel(channel) {}
 
 void PwmController::begin() {
-    // analogWriteFrequency and Resolution are global for the pin
+    // Correct ESP32 Arduino Core 3.x API signatures
     analogWriteFrequency(_pin, PWM_FREQ);
-    analogWriteResolution(PWM_RES);
+    analogWriteResolution(_pin, PWM_RES);
 
     Serial.println("PWM Hardware Initialized (analogWrite).");
 
