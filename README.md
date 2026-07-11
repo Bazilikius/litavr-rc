@@ -30,5 +30,8 @@ This project implements a CRSF (TBS Crossfire) protocol parser for the **ESP32-C
 
 - **No Data in Serial Monitor**: In Arduino IDE, ensure `USB CDC On Boot` is **Enabled**.
 - **Upload Fails**: Disconnect the receiver from Pin 6 (RX) before uploading. Incoming CRSF data can block the serial bootloader.
-- **No PWM**: Ensure you have a common ground between the ESP32, the RC Receiver, and the RC Switch.
-- **Pin Mapping**: On the ESP32-C3 Super Mini, GPIO 2 is a strapping pin. We use **GPIO 6** and **GPIO 7** for CRSF to avoid boot issues.
+- **No PWM Movement**:
+    - Ensure you have a **Common Ground (GND)** connected between the ESP32, the RC Receiver, and the RC Switch.
+    - Check if your RC switch requires 5V logic. The ESP32 outputs 3.3V logic. Most switches accept this, but some may need a level shifter.
+    - Confirm the RC switch is powered. Many switches need separate 5V power to move/trigger.
+- **Pin Mapping**: On the ESP32-C3 Super Mini, GPIO 2 is a strapping pin. We use **GPIO 6** and **GPIO 7** for CRSF and **GPIO 5** for PWM to avoid boot issues.
