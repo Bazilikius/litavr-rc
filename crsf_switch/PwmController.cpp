@@ -1,48 +1,50 @@
 #include "PwmController.h"
 
-// Using 50Hz for RC components
 #define PWM_FREQ 50
-// 12-bit resolution (0-4095)
 #define PWM_RES 12
 
-PwmController::PwmController(uint8_t pin, uint8_t channel) : _pin(pin), _channel(channel) {}
+PwmController::PwmController(uint8_t switchPin, uint8_t servoPin)
+    : _switchPin(switchPin), _servoPin(servoPin) {}
 
 void PwmController::begin() {
-    // Correct ESP32 Arduino Core 3.x API signatures
-    analogWriteFrequency(_pin, PWM_FREQ);
-    analogWriteResolution(_pin, PWM_RES);
+    analogWriteFrequency(_switchPin, PWM_FREQ);
+    analogWriteResolution(_switchPin, PWM_RES);
 
-    Serial.println("PWM Hardware Initialized (analogWrite).");
+    analogWriteFrequency(_servoPin, PWM_FREQ);
+    analogWriteResolution(_servoPin, PWM_RES);
 
-    // Boot-up test sequence: Sweep to show PWM is working
-    Serial.println("Starting PWM Sweep Test...");
-    writeMicros(1000);
-    delay(1000);
-    writeMicros(1500);
-    delay(1000);
-    writeMicros(2000);
-    delay(1000);
-    writeMicros(1500);
-    Serial.println("PWM Sweep Test Finished.");
+    Serial.printf("PWM Outputs Initialized: Switch Pin %d, Servo Pin %d\n", _switchPin, _servoPin);
+
+    // Sweeping test sequence at boot to verify physical connections
+    Serial.println("Testing Outputs...");
+    writeMicros(_switchPin, 1000);
+    writeMicros(_servoPin, 1000);
+    delay(500);
+    writeMicros(_switchPin, 1500);
+    writeMicros(_servoPin, 1500);
+    delay(500);
+    writeMicros(_switchPin, 2000);
+    writeMicros(_servoPin, 2000);
+    delay(500);
+    writeMicros(_switchPin, 1500);
+    writeMicros(_servoPin, 1500);
+    Serial.println("Outputs Ready.");
 }
 
-void PwmController::writeMicros(uint32_t us) {
-    // Convert microseconds to duty cycle
-    // Period = 1,000,000 / 50Hz = 20,000 us
-    // Duty = (us / 20000) * (2^12 - 1)
-    // (us * 4095) / 20000
+void PwmController::writeMicros(uint8_t pin, uint32_t us) {
+    // Convert microseconds to duty cycle (12-bit, 50Hz)
     uint32_t duty = (us * 4095) / 20000;
-
-    analogWrite(_pin, duty);
+    analogWrite(pin, duty);
 }
 
-void PwmController::update(uint16_t crsfValue) {
-    // Map CRSF (172-1811) to PWM Pulse Width (1000us-2000us)
+void PwmController::updateSwitch(uint16_t crsfValue) {
     uint32_t pwm_us = map(crsfValue, CRSF_MIN, CRSF_MAX, PWM_MIN, PWM_MAX);
-
-    // Safety constrain
     pwm_us = constrain(pwm_us, 800, 2200);
+    writeMicros(_switchPin, pwm_us);
+}
 
-    // Update PWM
-    writeMicros(pwm_us);
+void PwmController::updateServo(uint16_t crsfValue) {
+    uint32_t pwm_us = map(crsfValue, CRSF_MIN, CRSF_MAX, PWM_MIN, PWM_MAX);
+    pwm_us = constrain(pwm_us, 800, 2200);
+    writeMicros(_servoPin, pwm_us);
 }

@@ -1,6 +1,6 @@
-# ESP32-C3 Super Mini CRSF to PWM Switch Controller
+# ESP32-C3 Super Mini CRSF Dual Output & Web Configurator
 
-This project implements a CRSF (TBS Crossfire) protocol parser for the **ESP32-C3 Super Mini** that listens to **Channel 15** and converts it into a **PWM signal** (1000µs to 2000µs) to control an RC switch.
+This project implements a CRSF (TBS Crossfire) protocol parser for the **ESP32-C3 Super Mini** that parses incoming RC channels, controls two independent PWM outputs (**RC Switch** and **Servo**), and provides a local **WiFi Web Interface** to configure channel mappings dynamically.
 
 ## Hardware Setup (ESP32-C3 Super Mini)
 
@@ -8,30 +8,38 @@ This project implements a CRSF (TBS Crossfire) protocol parser for the **ESP32-C
 | --- | --- | --- | --- |
 | CRSF RX (From Receiver TX) | GPIO 6 | 6 | Serial1 RX |
 | CRSF TX (To Receiver RX) | GPIO 7 | 7 | Serial1 TX |
-| RC Switch PWM Output | GPIO 5 | 5 | PWM Signal |
+| RC Switch PWM Output | GPIO 5 | 5 | PWM Output (Configurable Channel) |
+| Servo PWM Output | GPIO 4 | 4 | PWM Output (Configurable Channel) |
 | GND | GND | GND | Common Ground |
 | 5V / VCC | 5V | 5V | Power for ESP32 and Receiver |
 
-## Installation (Arduino IDE)
-
-1. **Board Support**: Install `esp32` by Espressif Systems (v3.0.0 or higher recommended).
-2. **Board Selection**: Select `ESP32C3 Dev Module`.
-3. **USB Mode**: Set `USB CDC On Boot` to `Enabled` to see Serial output.
-4. **Flash**: Click Upload. If it fails, hold the `BOOT` button while plugging in the USB.
-
 ## Features
 
-- **Optimized for C3**: Uses `Serial1` for CRSF data.
-- **New LEDC API**: Compatible with Arduino ESP32 Core 3.0+.
-- **400k Baudrate**: Pre-configured for standard high-speed CRSF.
-- **Target Channel**: Specifically extracts Channel 15.
+- **WiFi Web Interface**: Configures mappings dynamically via a responsive webpage.
+- **Dual Outputs**: Customizes mapping for one RC Switch (GPIO 5) and one Servo (GPIO 4) to any of the 16 CRSF channels.
+- **Persistent Preferences**: Saves your customized mappings directly to the ESP32's non-volatile memory.
+- **Boot-up Sweeps**: Performs diagnostic startup sweeps on both outputs to confirm hardware connections.
+- **Sliding-Window Parser**: Features solid synchronization to parse 400k baud data flawlessly even with noise.
+
+## How to Configure Channel Mappings
+
+1. **Power on** the ESP32-C3 Super Mini. Both outputs (Switch and Servo) will perform a 1.5-second test sweep to verify their electrical connections.
+2. Search for WiFi networks on your phone or computer and connect to:
+   - **SSID**: `CRSF-Config`
+   - **Password**: `12345678`
+3. Open your web browser and go to: **`http://192.168.4.1`**
+4. Select the desired CRSF channels for the **Switch** and **Servo** outputs, and click **Save Configuration**.
+5. The ESP32 will immediately store these preferences and apply the changes!
+
+## Installation (Arduino IDE)
+
+1. Ensure you have the **ESP32 board support** installed (v3.0.0 or higher recommended).
+2. Select `ESP32C3 Dev Module` under boards.
+3. In `Tools`, make sure **`USB CDC On Boot`** is set to **`Enabled`** to read the debugging diagnostics in the Serial Monitor.
+4. Keep the RX pin disconnected during uploading, then reconnect it.
 
 ## Troubleshooting
 
-- **No Data in Serial Monitor**: In Arduino IDE, ensure `USB CDC On Boot` is **Enabled**.
+- **No Data in Serial Monitor**: Ensure `USB CDC On Boot` is **Enabled**.
 - **Upload Fails**: Disconnect the receiver from Pin 6 (RX) before uploading. Incoming CRSF data can block the serial bootloader.
-- **No PWM Movement**:
-    - Ensure you have a **Common Ground (GND)** connected between the ESP32, the RC Receiver, and the RC Switch.
-    - Check if your RC switch requires 5V logic. The ESP32 outputs 3.3V logic. Most switches accept this, but some may need a level shifter.
-    - Confirm the RC switch is powered. Many switches need separate 5V power to move/trigger.
-- **Pin Mapping**: On the ESP32-C3 Super Mini, GPIO 2 is a strapping pin. We use **GPIO 6** and **GPIO 7** for CRSF and **GPIO 5** for PWM to avoid boot issues.
+- **Outputs Not Moving**: Ensure a **Common Ground (GND)** is connected between the ESP32-C3, the RC receiver, and the servo/RC switch.

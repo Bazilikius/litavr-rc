@@ -5,14 +5,15 @@
 
 class PwmController {
 public:
-    PwmController(uint8_t pin, uint8_t channel);
+    PwmController(uint8_t switchPin, uint8_t servoPin);
     void begin();
-    void update(uint16_t crsfValue);
-    void writeMicros(uint32_t us);
+    void updateSwitch(uint16_t crsfValue);
+    void updateServo(uint16_t crsfValue);
+    void writeMicros(uint8_t pin, uint32_t us);
 
 private:
-    uint8_t _pin;
-    uint8_t _channel;
+    uint8_t _switchPin;
+    uint8_t _servoPin;
 
     static const uint16_t CRSF_MIN = 172;
     static const uint16_t CRSF_MAX = 1811;
