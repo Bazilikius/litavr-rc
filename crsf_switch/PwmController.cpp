@@ -18,7 +18,7 @@ void PwmController::begin() {
 
     Serial.printf("PWM Outputs Initialized: Switch %d, Servo %d, Camera %d\n", _switchPin, _servoPin, _cameraPin);
 
-    // Sweeping test sequence at boot to verify physical connections
+    // Sweeping test sequence at boot to verify physical connections (using general 1000us-2000us)
     Serial.println("Testing Outputs...");
     writeMicros(_switchPin, 1000);
     writeMicros(_servoPin, 1000);
@@ -44,20 +44,20 @@ void PwmController::writeMicros(uint8_t pin, uint32_t us) {
     analogWrite(pin, duty);
 }
 
-void PwmController::updateSwitch(uint16_t crsfValue) {
-    uint32_t pwm_us = map(crsfValue, CRSF_MIN, CRSF_MAX, PWM_MIN, PWM_MAX);
-    pwm_us = constrain(pwm_us, 800, 2200);
+void PwmController::updateSwitch(uint16_t crsfValue, uint16_t minUs, uint16_t maxUs) {
+    uint32_t pwm_us = map(crsfValue, CRSF_MIN, CRSF_MAX, minUs, maxUs);
+    pwm_us = constrain(pwm_us, 500, 2500);
     writeMicros(_switchPin, pwm_us);
 }
 
-void PwmController::updateServo(uint16_t crsfValue) {
-    uint32_t pwm_us = map(crsfValue, CRSF_MIN, CRSF_MAX, PWM_MIN, PWM_MAX);
-    pwm_us = constrain(pwm_us, 800, 2200);
+void PwmController::updateServo(uint16_t crsfValue, uint16_t minUs, uint16_t maxUs) {
+    uint32_t pwm_us = map(crsfValue, CRSF_MIN, CRSF_MAX, minUs, maxUs);
+    pwm_us = constrain(pwm_us, 500, 2500);
     writeMicros(_servoPin, pwm_us);
 }
 
-void PwmController::updateCamera(uint16_t crsfValue) {
-    uint32_t pwm_us = map(crsfValue, CRSF_MIN, CRSF_MAX, PWM_MIN, PWM_MAX);
-    pwm_us = constrain(pwm_us, 800, 2200);
+void PwmController::updateCamera(uint16_t crsfValue, uint16_t minUs, uint16_t maxUs) {
+    uint32_t pwm_us = map(crsfValue, CRSF_MIN, CRSF_MAX, minUs, maxUs);
+    pwm_us = constrain(pwm_us, 500, 2500);
     writeMicros(_cameraPin, pwm_us);
 }

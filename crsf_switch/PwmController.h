@@ -7,9 +7,9 @@ class PwmController {
 public:
     PwmController(uint8_t switchPin, uint8_t servoPin, uint8_t cameraPin);
     void begin();
-    void updateSwitch(uint16_t crsfValue);
-    void updateServo(uint16_t crsfValue);
-    void updateCamera(uint16_t crsfValue);
+    void updateSwitch(uint16_t crsfValue, uint16_t minUs, uint16_t maxUs);
+    void updateServo(uint16_t crsfValue, uint16_t minUs, uint16_t maxUs);
+    void updateCamera(uint16_t crsfValue, uint16_t minUs, uint16_t maxUs);
     void writeMicros(uint8_t pin, uint32_t us);
 
 private:
@@ -19,8 +19,6 @@ private:
 
     static const uint16_t CRSF_MIN = 172;
     static const uint16_t CRSF_MAX = 1811;
-    static const uint16_t PWM_MIN = 1000; // us
-    static const uint16_t PWM_MAX = 2000; // us
 };
 
 #endif

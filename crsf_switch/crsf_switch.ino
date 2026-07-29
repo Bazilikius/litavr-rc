@@ -2,6 +2,7 @@
  * CRSF to PWM Switch, Servo, & Camera Controller for ESP32-C3 Super Mini
  * - Listens to CRSF stream on Pins 6 & 7.
  * - Supports three dynamic PWM outputs: Switch (Pin 5), Servo (Pin 4), and Camera Switch (Pin 3).
+ * - Custom Minimum/Maximum pulse widths configured dynamically via Local Web UI.
  * - AP Config Web Portal ("CRSF-Config" at http://192.168.4.1) allows custom output mapping.
  * - Supports live Web Status Monitor displaying raw serial byte reception and channel values.
  * - Supports selecting dynamic baudrates (115200, 400000, 420000).
@@ -78,10 +79,10 @@ void loop() {
       uint16_t srvVal = parser.getChannel(activeConfig.servoChannel - 1);
       uint16_t camVal = parser.getChannel(activeConfig.cameraChannel - 1);
 
-      // Update hardware outputs
-      controller.updateSwitch(swVal);
-      controller.updateServo(srvVal);
-      controller.updateCamera(camVal);
+      // Update hardware outputs with custom min/max PWM ranges (microseconds)
+      controller.updateSwitch(swVal, activeConfig.switchMin, activeConfig.switchMax);
+      controller.updateServo(srvVal, activeConfig.servoMin, activeConfig.servoMax);
+      controller.updateCamera(camVal, activeConfig.cameraMin, activeConfig.cameraMax);
 
       // Hardware Serial monitor outputs on value change
       if (abs((int)swVal - (int)lastSwitchVal) > 10 ||

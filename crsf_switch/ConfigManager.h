@@ -9,6 +9,14 @@ struct OutputConfig {
     uint8_t servoChannel;  // 1-16
     uint8_t cameraChannel; // 1-16
     uint32_t crsfBaudrate; // 115200, 400000, 420000
+
+    // Custom PWM limits (us)
+    uint16_t switchMin;
+    uint16_t switchMax;
+    uint16_t servoMin;
+    uint16_t servoMax;
+    uint16_t cameraMin;
+    uint16_t cameraMax;
 };
 
 class ConfigManager {
