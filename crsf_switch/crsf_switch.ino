@@ -16,7 +16,7 @@
 // Hardware Pin Configuration
 #define CRSF_SERIAL Serial1
 #define RX_PIN 6
-#define TX_PIN 7
+#define TX_PIN -1 // Receive-only mode: ESP32-C3 only listens to CRSF TX line, does not transmit back
 #define SWITCH_PIN 5
 #define SERVO_PIN 4
 #define CAMERA_PIN 3

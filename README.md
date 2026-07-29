@@ -6,8 +6,8 @@ This project implements a CRSF (TBS Crossfire) protocol parser for the **ESP32-C
 
 | Component | Super Mini Pin | Arduino Pin | Note |
 | --- | --- | --- | --- |
-| CRSF RX (From Receiver TX) | GPIO 6 | 6 | Serial1 RX |
-| CRSF TX (To Receiver RX) | GPIO 7 | 7 | Serial1 TX |
+| CRSF RX (From Receiver TX) | GPIO 6 | 6 | Serial1 RX (Listen-only configuration) |
+| CRSF TX (To Receiver RX) | - | - | Unused (TX set to -1 on ESP to prevent transmission) |
 | RC Switch PWM Output | GPIO 5 | 5 | PWM Output (Configurable Channel & Limits) |
 | Servo PWM Output | GPIO 4 | 4 | PWM Output (Configurable Channel & Limits) |
 | Camera Switch PWM Output | GPIO 3 | 3 | PWM Output (Configurable Channel & Limits) |
