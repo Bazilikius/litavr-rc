@@ -7,6 +7,8 @@
 struct OutputConfig {
     uint8_t switchChannel; // 1-16
     uint8_t servoChannel;  // 1-16
+    uint8_t cameraChannel; // 1-16
+    uint32_t crsfBaudrate; // 115200, 400000, 420000
 };
 
 class ConfigManager {
