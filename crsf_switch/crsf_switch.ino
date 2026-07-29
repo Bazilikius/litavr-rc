@@ -65,10 +65,12 @@ void loop() {
   // 1. Process client configuration requests & AJAX status requests
   webServer.handleClient();
 
-  // 2. Parse CRSF stream
-  while (CRSF_SERIAL.available()) {
+  // 2. Parse CRSF stream (with a safety limit to prevent trapping CPU and starving WiFi task)
+  uint8_t readLimit = 0;
+  while (CRSF_SERIAL.available() && readLimit < 128) {
     uint8_t b = CRSF_SERIAL.read();
     byteCount++;
+    readLimit++;
 
     if (parser.processByte(b)) {
       packetCount++;
@@ -100,6 +102,9 @@ void loop() {
       }
     }
   }
+
+  // Feed/Yield to system tasks (TCP/IP and WiFi stack) to maximize network/CPU stability
+  delay(1);
 
   // 3. Hardware Serial diagnostic reports every 5 seconds
   if (millis() - lastReport > 5000) {

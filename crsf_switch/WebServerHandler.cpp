@@ -3,10 +3,20 @@
 WebServerHandler::WebServerHandler(ConfigManager &configManager, CrsfParser &parser, uint32_t &byteCount, uint32_t &packetCount)
     : _configManager(configManager), _parser(parser), _byteCount(byteCount), _packetCount(packetCount), _server(80) {}
 
+#include <esp_wifi.h>
+
 void WebServerHandler::begin() {
     // Start AP mode
     WiFi.softAP("CRSF-Config", "12345678");
+
+    // Reduce WiFi Tx Power to 50% (approx 10dBm out of max 20dBm) for stability & low power
+    // ESP32-C3 maximum Tx power is 20dBm (corresponding to WIFI_POWER_19_5dBm)
+    // 50% power corresponds to ~10dBm (or WIFI_POWER_11dBm/WIFI_POWER_8_5dBm)
+    // We can use WiFi.setTxPower(WIFI_POWER_11dBm) or WIFI_POWER_8_5dBm, or set to 10.
+    WiFi.setTxPower(WIFI_POWER_11dBm);
+
     Serial.println("WiFi Access Point Started: SSID='CRSF-Config', Password='12345678'");
+    Serial.printf("WiFi Transmit Power limited to 11dBm (~50%% power output).\n");
     Serial.print("IP Address: ");
     Serial.println(WiFi.softAPIP());
 
