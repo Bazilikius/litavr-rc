@@ -1,46 +1,58 @@
 # ESP32 CRSF LoRa Multi-Board Remote Control System
 
-This project splits the original passive receiver into a high-performance **CRSF-to-LoRa Transmitter (TX)** and a fleet of up to **4 Independent LoRa Receiver and Output Controller Boards (RX)** running a Mesh-like broadcast configuration over **ESP32 Dev Modules** and **SX127x LoRa** modules.
+This project splits the original passive receiver into a high-performance **CRSF-to-LoRa Transmitter (TX)** and a fleet of up to **4 Independent LoRa Receiver and Output Controller Boards (RX)** running a Mesh-like broadcast configuration over **ESP32 Dev Modules** and LoRa hardware.
 
 ---
 
-## 1. System Architecture
+## 1. System Architecture & Hardware Modules
 
 ```
-                    +-----------------------------+
-                    |      CRSF Transmitter       |
-                    | (Listens to CRSF on Serial2)|
-                    +--------------+--------------+
-                                   |
-                         [LoRa 433/868/915 MHz]
-                     (Broadcasts 16 channel values)
-                                   |
-        +------------------+-------+--------+------------------+
-        |                  |                |                  |
-        v                  v                v                  v
-  +-----------+      +-----------+    +-----------+      +-----------+
-  |  RX Board |      |  RX Board |    |  RX Board |      |  RX Board |
-  |  Node 1   |      |  Node 2   |    |  Node 3   |      |  Node 4   |
-  +-----------+      +-----------+    +-----------+      +-----------+
+                    +------------------------------------+
+                    |        CRSF Transmitter            |
+                    | (Ebyte E32-433T30D / SX1278 LoRa)  |
+                    +-----------------+------------------+
+                                      |
+                            [LoRa 433 MHz / 3km+ Range]
+                                      |
+        +---------------------+-------+-------+---------------------+
+        |                     |               |                     |
+        v                     v               v                     v
+  +-------------+       +-------------+ +-------------+       +-------------+
+  |  RX Node 1  |       |  RX Node 2  | |  RX Node 3  |       |  RX Node 4  |
+  | (RFM95/98W) |       | (RFM95/98W) | | (RFM95/98W) |       | (RFM95/98W) |
+  +-------------+       +-------------+ +-------------+       +-------------+
 ```
+
+### Radio Modules for 3km+ Long-Range Transmission:
+* **Transmitter (TX) Module**: **Ebyte E32-433T30D** (1 Watt / 30dBm power output, 433MHz).
+  * Pins **M0 (GND)** and **M1 (GND)** are connected to ground to configure the module in **Normal (Transparent Transmission) Mode**.
+  * Driven via Serial interface to ensure high-power, reliable long-range broadcast.
+* **Receiver (RX) Modules**: **RFM95 / RFM98W / SX1278** SPI LoRa chips.
+  * Optimized with software settings for maximum sensitivity to reliably receive signals at **3km+ range** (Spreading Factor: **SF11**, Bandwidth: **125 kHz**, Coding Rate: **4/5**, with Low Data Rate Optimization active).
 
 ---
 
 ## 2. Hardware Wiring (ESP32 Dev Module)
 
 ### Transmitter Board (TX)
-| Component | ESP32 Pin | Note |
+| Component / Pin | ESP32 Pin | Note |
 | --- | --- | --- |
-| CRSF RX | GPIO 16 (RX2) | Serial2 RX connection to TBS Crossfire / ELRS |
-| LoRa SS/CS | GPIO 5 | SPI Slave Select |
-| LoRa RST | GPIO 14 | Reset pin |
-| LoRa DIO0 | GPIO 2 | Interrupt / Rx-Tx-Done pin |
-| LoRa SCK | GPIO 18 | SPI Clock |
-| LoRa MISO | GPIO 19 | SPI Master In Slave Out |
-| LoRa MOSI | GPIO 23 | SPI Master Out Slave In |
+| **CRSF RX** | GPIO 16 (RX2) | Serial2 RX connection from TBS Crossfire / ELRS |
+| **E32 TXD** | GPIO 27 | Serial1 RX (receives data from E32) |
+| **E32 RXD** | GPIO 17 | Serial1 TX (sends parsed CRSF packets to E32) |
+| **E32 M0** | GND | Hardwired to ground for transparent mode |
+| **E32 M1** | GND | Hardwired to ground for transparent mode |
+| **LoRa SS/CS** | GPIO 5 | SPI Slave Select (alternative built-in LoRa SPI) |
+| **LoRa SCK** | GPIO 18 | SPI SCK |
+| **LoRa MISO** | GPIO 19 | SPI MISO |
+| **LoRa MOSI** | GPIO 23 | SPI MOSI |
+
+> **Note for Ebyte E32-433T30D (TX)**: Because it outputs up to 1W (30dBm), it must be powered via an external 5V regulator capable of handling at least 1A peak current. Adding a 470uF decoupling capacitor across its VCC and GND pins is highly recommended to filter power spikes.
+
+---
 
 ### Receiver Board (RX)
-| Component | ESP32 Pin | Type | Note |
+| Component / Pin | ESP32 Pin | Type | Note |
 | --- | --- | --- | --- |
 | **Left Servo PWM** | GPIO 12 | Output | Main left servo output (50Hz PWM) |
 | **Right Servo PWM** | GPIO 13 | Output | Synchronous right servo output (Inversion supported) |
@@ -49,12 +61,12 @@ This project splits the original passive receiver into a high-performance **CRSF
 | **Status LED** | GPIO 27 | Output | Lights up when Upper limit switch is open |
 | **Upper Limit Switch** | GPIO 32 | Input | Configured with `INPUT_PULLUP` (Open/Triggered reads HIGH) |
 | **Lower Limit Switch** | GPIO 33 | Input | Configured with `INPUT_PULLUP` (Open/Triggered reads HIGH) |
-| LoRa SS/CS | GPIO 5 | Output | SPI Slave Select |
-| LoRa RST | GPIO 14 | Output | Reset pin |
-| LoRa DIO0 | GPIO 2 | Input | Interrupt pin |
-| LoRa SCK | GPIO 18 | Output | SPI Clock |
-| LoRa MISO | GPIO 19 | Input | SPI MISO |
-| LoRa MOSI | GPIO 23 | Output | SPI MOSI |
+| **LoRa SS/CS** | GPIO 5 | Output | SPI Slave Select for RFM95/RFM98W/SX1278 |
+| **LoRa RST** | GPIO 14 | Output | Reset pin |
+| **LoRa DIO0** | GPIO 2 | Input | Interrupt pin |
+| **LoRa SCK** | GPIO 18 | Output | SPI SCK |
+| **LoRa MISO** | GPIO 19 | Input | SPI MISO |
+| **LoRa MOSI** | GPIO 23 | Output | SPI MOSI |
 
 ---
 
@@ -70,7 +82,7 @@ This project splits the original passive receiver into a high-performance **CRSF
    - An LED (GPIO 27) automatically lights up if the **Upper** limit switch is open.
 
 3. **Multi-Board Mesh/Addressing & Switch Tolerances**:
-   - Broadcast allows 4 independent boards to listen to the same LoRa packet, but each board is configured to respond to a specific CRSF channel and switch trigger position (e.g., 1000, 1500, or 2000).
+   - Broadcast allows up to 4 independent boards to listen to the same LoRa packet, but each board is configured to respond to a specific CRSF channel and switch trigger position (e.g., 1000, 1500, or 2000).
    - **Central Position (1500)**: Triggers inside `1400-1600` to compensate for joystick/switch slop.
    - **Edge Positions (1000 / 2000)**: Trigger inside a `±50` step range (e.g., `950-1050` for 1000; `1950-2050` for 2000).
 
@@ -78,7 +90,7 @@ This project splits the original passive receiver into a high-performance **CRSF
    - When enabled, the Servo configuration (channel and trigger position) is automatically duplicated to the MOSFET configuration. This simplifies set up to a single master channel.
 
 5. **25% WiFi Tx Power Limitation**:
-   - To conserve power, reduce heat, and prevent interference, the WiFi AP transmit power on both boards is limited to 25% (approx 5dBm).
+   - To conserve power, reduce heat, and prevent interference with the long-range LoRa telemetry link, the WiFi AP transmit power on both boards is limited to 25% (approx 5dBm).
 
 ---
 
