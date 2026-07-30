@@ -102,3 +102,23 @@ This project splits the original passive receiver into a high-performance **CRSF
    - **Password**: `12345678`
 3. Open your browser and go to: **`http://192.168.4.1`**
 4. Configure the mapped channels, switch triggers, inversion, and custom PWM limits, then click **Save**. The board will save preferences to non-volatile storage and reboot.
+
+---
+
+## 5. Troubleshooting: Board Reboots on Limit Switch Trigger
+
+If your ESP32 board reboots (resets) when both limit switches are triggered simultaneously, check the following potential hardware issues:
+
+### 1. Incorrect Limit Switch Wiring (Short Circuit)
+* **Problem**: The limit switches must be wired **strictly** between the GPIO pin (GPIO 32/33) and **GND**. If you connected the switch terminals to **VCC/3.3V/5V** and **GND** simultaneously, closing the switches creates a direct short circuit across the power rails, immediately causing a hardware reboot.
+* **Solution**: Ensure each switch has only two connections: one terminal goes to the ESP32 GPIO (32 or 33), and the other terminal goes to a **GND** pin. *Never connect VCC or 3.3V/5V to the mechanical switches!*
+
+### 2. Power Supply Brownouts (Servo Current Spikes)
+* **Problem**: When both limit switches trigger, both servos instantly move to their neutral/safety positions at the same millisecond. Moving two servos simultaneously draws a massive transient current spike (1A to 2.5A). If you are powering the ESP32 and the servos from the same weak 5V line or via USB, the voltage will drop below 2.7V, triggering the ESP32's internal **Brownout Detector** which resets the CPU.
+* **Solution**:
+  * Add a large decoupling capacitor (at least **1000 µF, 6.3V or 10V**) across the 5V and GND rail close to the ESP32.
+  * Connect the servos to a separate external power source (e.g., BEC or step-down converter) instead of drawing all current through the ESP32 Dev Module's regulator.
+
+### 3. Inductive Back-EMF Spikes from the MOSFET
+* **Problem**: When switches trigger, the MOSFET is instantly switched off. If the MOSFET is driving an inductive load (such as a solenoid, relay, valve, or DC motor) without a flyback diode, turning it off instantly creates a massive high-voltage spike (back-EMF) that enters the ESP32 ground plane, causing a CPU crash/reset.
+* **Solution**: Always connect a flyback diode (e.g., **1N4007** or **1N5819**) in parallel with the inductive load (anode to GND, cathode to the positive load line) to absorb and dissipate the back-EMF spike.

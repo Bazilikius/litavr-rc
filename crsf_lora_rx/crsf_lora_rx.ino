@@ -45,6 +45,13 @@ bool upperSwOpen = false;
 bool lowerSwOpen = false;
 bool overrideActive = false;
 
+// Debounce variables for mechanical limit switches to prevent high-frequency EMI resets
+uint32_t lastUpperSwTime = 0;
+uint32_t lastLowerSwTime = 0;
+bool debouncedUpperSw = false;
+bool debouncedLowerSw = false;
+const uint32_t DEBOUNCE_DELAY_MS = 50; // 50ms stable window
+
 struct LoraPacket {
     uint16_t signature; // 0x55AA
     uint32_t packetId;
@@ -117,12 +124,30 @@ void loop() {
         lora.startReceive();
     }
 
-    // 3. Read Limit Switches & Update LED
-    upperSwOpen = controller.isUpperSwitchOpen();
-    lowerSwOpen = controller.isAnyLimitSwitchOpen() && !upperSwOpen; // Just to get both states independently
-    // Wait, let's read them directly for accurate status reporting:
-    upperSwOpen = (digitalRead(UPPER_SW_PIN) == HIGH);
-    lowerSwOpen = (digitalRead(LOWER_SW_PIN) == HIGH);
+    // 3. Read Limit Switches & Apply Software Debounce (prevents high-frequency switching and power reboots)
+    bool rawUpper = (digitalRead(UPPER_SW_PIN) == HIGH);
+    bool rawLower = (digitalRead(LOWER_SW_PIN) == HIGH);
+
+    if (rawUpper != debouncedUpperSw) {
+        if (millis() - lastUpperSwTime > DEBOUNCE_DELAY_MS) {
+            debouncedUpperSw = rawUpper;
+            lastUpperSwTime = millis();
+        }
+    } else {
+        lastUpperSwTime = millis();
+    }
+
+    if (rawLower != debouncedLowerSw) {
+        if (millis() - lastLowerSwTime > DEBOUNCE_DELAY_MS) {
+            debouncedLowerSw = rawLower;
+            lastLowerSwTime = millis();
+        }
+    } else {
+        lastLowerSwTime = millis();
+    }
+
+    upperSwOpen = debouncedUpperSw;
+    lowerSwOpen = debouncedLowerSw;
 
     // LED glows if Upper switch is open
     digitalWrite(LED_PIN, upperSwOpen ? HIGH : LOW);
