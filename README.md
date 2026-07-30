@@ -54,7 +54,7 @@ This project splits the original passive receiver into a high-performance **CRSF
 ### Receiver Board (RX)
 | Component / Pin | ESP32 Pin | Type | Note |
 | --- | --- | --- | --- |
-| **Left Servo PWM** | GPIO 12 | Output | Main left servo output (50Hz PWM) |
+| **Left Servo PWM** | GPIO 4 | Output | Main left servo output (50Hz PWM) - *Moved from GPIO 12* |
 | **Right Servo PWM** | GPIO 13 | Output | Synchronous right servo output (Inversion supported) |
 | **External MOSFET** | GPIO 25 | Output | Controlled via channel toggle & overridden by switches |
 | **Extra Output Pin** | GPIO 26 | Output | Replicates MOSFET output level |
@@ -73,7 +73,7 @@ This project splits the original passive receiver into a high-performance **CRSF
 ## 3. Advanced Features
 
 1. **Synchronous Servo Control with Inversion**:
-   - Controls two physical servos (Left on GPIO 12, Right on GPIO 13) synchronously.
+   - Controls two physical servos (Left on GPIO 4, Right on GPIO 13) synchronously.
    - An inversion toggle is available in the Web Configurator for the Right Servo, allowing opposite mechanical motion directions.
 
 2. **Dual Limit Switches Safety & MOSFET Override**:
@@ -122,3 +122,21 @@ If your ESP32 board reboots (resets) when both limit switches are triggered simu
 ### 3. Inductive Back-EMF Spikes from the MOSFET
 * **Problem**: When switches trigger, the MOSFET is instantly switched off. If the MOSFET is driving an inductive load (such as a solenoid, relay, valve, or DC motor) without a flyback diode, turning it off instantly creates a massive high-voltage spike (back-EMF) that enters the ESP32 ground plane, causing a CPU crash/reset.
 * **Solution**: Always connect a flyback diode (e.g., **1N4007** or **1N5819**) in parallel with the inductive load (anode to GND, cathode to the positive load line) to absorb and dissipate the back-EMF spike.
+
+---
+
+## 6. Troubleshooting: Uploading / Flashing Failures on ESP32
+
+If you encounter flashing errors such as:
+`Warning: Failed to communicate with the flash chip, read/write operations will fail.`
+`A fatal error occurred: Serial data stream stopped: Possible serial noise or corruption.`
+
+This is usually caused by **GPIO 12 (MTDI)** being pulled HIGH at boot. GPIO 12 is an ESP32 strapping pin that sets the SPI flash voltage. If pulled HIGH, the flash is run at 1.8V instead of 3.3V, causing complete SPI communication failure.
+
+### Software Resolution (Already Done)
+We have relocated the **Left Servo PWM Output** to **GPIO 4**, which is a safe, non-strapping pin.
+
+### Hardware Best Practices
+* **Disconnect Peripheral Connections**: Always disconnect your servos or high-load devices from the ESP32 pins (especially GPIO 4 / GPIO 13 / GPIO 12) before uploading firmware, as connected components can inject serial noise or draw too much current from the USB bus during flashing.
+* **Lower the Upload Speed**: In the Arduino IDE, set `Upload Speed` to **`115200`** instead of `921600` to prevent data stream corruption.
+* **Bootloader Entry**: If the board fails to connect, hold down the physical **BOOT/IO0 button** on your ESP32 module, click Upload, and only release it once you see the `Connecting...` message in the console.

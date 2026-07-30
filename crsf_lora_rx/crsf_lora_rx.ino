@@ -1,7 +1,7 @@
 /*
  * CRSF LoRa Receiver & Outputs Controller for ESP32 (Dev Module)
  * - Receives channel broadcast from Transmitter via SX127x LoRa Module.
- * - Controls 2 synchronous servos (Left on GPIO 12, Right on GPIO 13) with optional Right Servo Inversion.
+ * - Controls 2 synchronous servos (Left on GPIO 4, Right on GPIO 13) with optional Right Servo Inversion.
  * - Controls MOSFET on GPIO 25 and Extra Pin on GPIO 26.
  * - Monitor 2 Limit Switches: Upper (GPIO 32) and Lower (GPIO 33) using INPUT_PULLUP.
  * - If at least one limit switch is open (reads HIGH), MOSFET and Extra Pin are forced to configured Off Level (HIGH/LOW).
@@ -18,7 +18,10 @@
 #include "LoraModule.h"
 
 // Pin Definitions for ESP32 Dev Module
-#define LEFT_SERVO_PIN  12
+// Note: Changed LEFT_SERVO_PIN from 12 to 4 because GPIO 12 (MTDI) is an ESP32 strapping pin.
+// If GPIO 12 is held HIGH at boot (by servo pull-ups), SPI Flash voltage falls to 1.8V,
+// causing 'Failed to communicate with the flash chip' uploading error. GPIO 4 is fully safe.
+#define LEFT_SERVO_PIN  4
 #define RIGHT_SERVO_PIN 13
 #define MOSFET_PIN      25
 #define EXTRA_PIN       26
