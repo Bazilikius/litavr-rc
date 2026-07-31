@@ -4,15 +4,16 @@
  * - Controls 2 synchronous servos (Left on GPIO 4, Right on GPIO 13) with Left and Right software inversions.
  * - Controls Extra Pin on GPIO 26 (replicates the active/trigger level of the servos).
  * - Controls Power Key Pin on GPIO 15 (outputs 0V/5V) with a 60-second delay logic.
- * - Monitor 3 Limit Switches:
+ * - Monitors 3 Limit Switches:
  *   1. Upper (GPIO 32) using INPUT_PULLUP.
  *   2. Lower (GPIO 33) using INPUT_PULLUP.
  *   3. Servo UP Switch (GPIO 25) using INPUT_PULLUP.
  * - LED (GPIO 27) lights up when Upper Limit Switch is open (reads HIGH).
- * - If Servo UP Switch (GPIO 25) is pressed (reads LOW), servos are overridden and driven UP (active position).
+ * - If Servo UP Switch (GPIO 25) is open (reads HIGH), servos are overridden and driven UP (active position).
+ * - If Servo UP Switch (GPIO 25) is closed (reads LOW), servos can be driven DOWN (following CRSF channel).
  * - Power Key Pin (GPIO 15) is set HIGH only if:
  *   a) 60 seconds have elapsed since the CRSF channel commanded the servos to go DOWN.
- *   b) AND simultaneously: Upper Switch is triggered (open/HIGH) AND Servo UP Switch (GPIO 25) is pressed (LOW).
+ *   b) AND simultaneously: ALL THREE limit switches are CLOSED (read LOW / connected to GND).
  * - Hosts a local Web Configurator Access Point (AP SSID: "CRSF-Config-RX") with WiFi TX power reduced to 25%.
  */
 
@@ -55,8 +56,12 @@ bool overrideActive = false;
 // Debounce variables for mechanical limit switches to prevent high-frequency EMI resets
 uint32_t lastUpperSwTime = 0;
 uint32_t lastLowerSwTime = 0;
-bool debouncedUpperSw = false;
-bool debouncedLowerSw = false;
+uint32_t lastMosfetSwTime = 0;
+
+bool debouncedUpperSw = false; // true = open (HIGH), false = closed (LOW)
+bool debouncedLowerSw = false; // true = open (HIGH), false = closed (LOW)
+bool debouncedMosfetSw = false; // true = open (HIGH), false = closed (LOW)
+
 const uint32_t DEBOUNCE_DELAY_MS = 50; // 50ms stable window
 
 // Timer for the 60-second power key delay
@@ -142,6 +147,7 @@ void loop() {
     // 3. Read Limit Switches & Apply Software Debounce (prevents high-frequency switching and power reboots)
     bool rawUpper = (digitalRead(UPPER_SW_PIN) == HIGH);
     bool rawLower = (digitalRead(LOWER_SW_PIN) == HIGH);
+    bool rawMosfet = (digitalRead(MOSFET_PIN) == HIGH);
 
     if (rawUpper != debouncedUpperSw) {
         if (millis() - lastUpperSwTime > DEBOUNCE_DELAY_MS) {
@@ -161,8 +167,18 @@ void loop() {
         lastLowerSwTime = millis();
     }
 
+    if (rawMosfet != debouncedMosfetSw) {
+        if (millis() - lastMosfetSwTime > DEBOUNCE_DELAY_MS) {
+            debouncedMosfetSw = rawMosfet;
+            lastMosfetSwTime = millis();
+        }
+    } else {
+        lastMosfetSwTime = millis();
+    }
+
     upperSwOpen = debouncedUpperSw;
     lowerSwOpen = debouncedLowerSw;
+    bool servoUpSwOpen = debouncedMosfetSw; // HIGH = open, meaning move servos UP
 
     // LED glows if Upper switch is open
     digitalWrite(LED_PIN, upperSwOpen ? HIGH : LOW);
@@ -182,20 +198,21 @@ void loop() {
 
     bool servoActive = crsfServoActive;
 
-    // Override servos to move UP if the physical limit switch on GPIO 25 is pressed (reads LOW)
-    bool servoUpSwPressed = controller.isMosfetSwPressed();
-    if (servoUpSwPressed) {
+    // Override servos to move UP if the physical limit switch on GPIO 25 is open (reads HIGH)
+    if (servoUpSwOpen) {
         servoActive = true;
     }
 
     // Replicate active servo state to Extra Pin (GPIO 26): HIGH when active (servos UP), LOW when inactive (servos DOWN)
     digitalWrite(EXTRA_PIN, servoActive ? HIGH : LOW);
 
-    // 60-second delay logic for Power Key:
+    // 60-second delay logic for Power Key (GPIO 15):
     // Activates (HIGH) 60 seconds after the CRSF channel commands servos to go DOWN,
-    // AND simultaneously: Upper limit switch is triggered (open/HIGH) AND manual switch (GPIO 25) is pressed (LOW).
+    // AND simultaneously: ALL THREE limit switches are CLOSED (read LOW / connected to GND).
     bool elapsed60s = (loweredTimestamp != 0 && (millis() - loweredTimestamp >= 60000));
-    bool powerKeyOn = elapsed60s && upperSwOpen && servoUpSwPressed;
+    bool allThreeClosed = (!upperSwOpen) && (!lowerSwOpen) && (!servoUpSwOpen);
+
+    bool powerKeyOn = elapsed60s && allThreeClosed;
     digitalWrite(POWER_KEY_PIN, powerKeyOn ? HIGH : LOW);
 
     // Update Servos based on active state
@@ -211,7 +228,7 @@ void loop() {
                       packetCount,
                       upperSwOpen ? "OPEN (Triggered)" : "CLOSED (OK)",
                       lowerSwOpen ? "OPEN (Triggered)" : "CLOSED (OK)",
-                      servoUpSwPressed ? "PRESSED" : "RELEASED",
+                      servoUpSwOpen ? "OPEN / HIGH (UP Command)" : "CLOSED / LOW (OK)",
                       servoActive ? "YES" : "NO",
                       powerKeyOn ? "ON (5V)" : "OFF (0V)",
                       secondsDown);
