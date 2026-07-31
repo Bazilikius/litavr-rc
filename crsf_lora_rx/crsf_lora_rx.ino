@@ -1,11 +1,15 @@
 /*
  * CRSF LoRa Receiver & Outputs Controller for ESP32 (Dev Module)
  * - Receives channel broadcast from Transmitter via SX127x LoRa Module.
- * - Controls 2 synchronous servos (Left on GPIO 4, Right on GPIO 13) with optional Right Servo Inversion.
- * - Controls MOSFET on GPIO 25 and Extra Pin on GPIO 26.
- * - Monitor 2 Limit Switches: Upper (GPIO 32) and Lower (GPIO 33) using INPUT_PULLUP.
- * - If at least one limit switch is open (reads HIGH), MOSFET and Extra Pin are forced to configured Off Level (HIGH/LOW).
+ * - Controls 2 synchronous servos (Left on GPIO 4, Right on GPIO 13) with Left and Right software inversions.
+ * - Controls Extra Pin on GPIO 26 (replicates the active/trigger level of CRSF channel).
+ * - Monitor 3 Limit Switches:
+ *   1. Upper (GPIO 32) using INPUT_PULLUP.
+ *   2. Lower (GPIO 33) using INPUT_PULLUP.
+ *   3. Servo UP Switch (GPIO 25) using INPUT_PULLUP - formerly MOSFET output.
+ * - If at least one safety limit switch (Upper/Lower) is open (reads HIGH), Extra Pin is forced to configured Off Level (HIGH/LOW).
  * - LED (GPIO 27) lights up when Upper Limit Switch is open.
+ * - If Servo UP Switch (GPIO 25) is pressed (reads LOW), servos are overridden and driven UP (active position).
  * - Hosts a local Web Configurator Access Point (AP SSID: "CRSF-Config-RX") with WiFi TX power reduced to 25%.
  * - Supports "All one channel" configuration option to duplicate settings.
  */
@@ -18,12 +22,9 @@
 #include "LoraModule.h"
 
 // Pin Definitions for ESP32 Dev Module
-// Note: Changed LEFT_SERVO_PIN from 12 to 4 because GPIO 12 (MTDI) is an ESP32 strapping pin.
-// If GPIO 12 is held HIGH at boot (by servo pull-ups), SPI Flash voltage falls to 1.8V,
-// causing 'Failed to communicate with the flash chip' uploading error. GPIO 4 is fully safe.
 #define LEFT_SERVO_PIN  4
 #define RIGHT_SERVO_PIN 13
-#define MOSFET_PIN      25
+#define MOSFET_PIN      25 // Re-purposed as a limit switch input to move servos UP
 #define EXTRA_PIN       26
 #define LED_PIN         27
 #define UPPER_SW_PIN    32
@@ -104,8 +105,8 @@ void setup() {
         lora.startReceive();
     }
 
-    // Initialize Outputs and run self-test sweep
-    controller.begin();
+    // Initialize Outputs with correct left/right inversions and run synchronized self-test sweep
+    controller.begin(activeConfig.servoInvertLeft != 0, activeConfig.servoInvertRight != 0, activeConfig.servoMin, activeConfig.servoMax);
 }
 
 void loop() {
@@ -155,16 +156,22 @@ void loop() {
     // LED glows if Upper switch is open
     digitalWrite(LED_PIN, upperSwOpen ? HIGH : LOW);
 
-    // 4. Run Trigger Logic and update Servos/MOSFET
+    // 4. Run Trigger Logic and update Servos/Extra Pin
     RxConfig activeConfig = configManager.getConfig();
 
     bool servoActive = isTriggerActive(channels[activeConfig.servoChannel - 1], activeConfig.servoTrigger);
     bool mosfetActive = isTriggerActive(channels[activeConfig.mosfetChannel - 1], activeConfig.mosfetTrigger);
 
-    // Limit switch safety override
+    // Override servos to move UP if the physical limit switch on GPIO 25 is pressed (reads LOW)
+    bool servoUpSwPressed = controller.isMosfetSwPressed();
+    if (servoUpSwPressed) {
+        servoActive = true;
+    }
+
+    // Limit switch safety override (Upper/Lower switches block/override Extra Pin)
     if (upperSwOpen || lowerSwOpen) {
         overrideActive = true;
-        // Force MOSFET & Extra Pin to the safety Off Level
+        // Force Extra Pin to the safety Off Level
         controller.updateOutputs(false, activeConfig.mosfetOffLevel);
     } else {
         overrideActive = false;
@@ -173,20 +180,20 @@ void loop() {
     }
 
     // Update Servos
-    controller.updateServos(servoActive, activeConfig.servoMin, activeConfig.servoMax, activeConfig.servoInvertRight != 0);
+    controller.updateServos(servoActive, activeConfig.servoMin, activeConfig.servoMax, activeConfig.servoInvertLeft != 0, activeConfig.servoInvertRight != 0);
 
     // Yield to WiFi/TCP tasks
     delay(1);
 
     // 5. Diagnostics reporting
     if (millis() - lastReport > 5000) {
-        Serial.printf("[RX] Received LoRa Packets: %u | UpperSw: %s | LowerSw: %s | Override: %s | ServoPairActive: %s | MosfetActive: %s\n",
+        Serial.printf("[RX] Received LoRa: %u | UpperSw: %s | LowerSw: %s | ServoUpSw: %s | Override: %s | ServoPairActive: %s\n",
                       packetCount,
                       upperSwOpen ? "OPEN (Triggered)" : "CLOSED (OK)",
                       lowerSwOpen ? "OPEN (Triggered)" : "CLOSED (OK)",
+                      servoUpSwPressed ? "PRESSED" : "RELEASED",
                       overrideActive ? "ACTIVE" : "NONE",
-                      servoActive ? "YES" : "NO",
-                      mosfetActive ? "YES" : "NO");
+                      servoActive ? "YES" : "NO");
         lastReport = millis();
     }
 }

@@ -7,6 +7,7 @@
 struct RxConfig {
     uint8_t servoChannel;      // 1-16, default 16
     uint16_t servoTrigger;     // 1000, 1500, 2000, default 1500
+    uint8_t servoInvertLeft;   // 0 or 1, default 0
     uint8_t servoInvertRight;  // 0 or 1, default 0
     uint16_t servoMin;         // 500-2500 us, default 1000
     uint16_t servoMax;         // 500-2500 us, default 2000

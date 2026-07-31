@@ -135,7 +135,7 @@ void WebServerHandler::_handleRoot() {
     html += "<form action='/save' method='POST' onsubmit='document.getElementById(\"mos_chan\").disabled=false; document.getElementById(\"mos_trig\").disabled=false;'>";
 
     // 1. Servos Config
-    html += "<h3>1. Налаштування Сервоприводів (GPIO 12, GPIO 13)</h3>";
+    html += "<h3>1. Налаштування Сервоприводів (GPIO 4, GPIO 13)</h3>";
     html += "<label for='srv_chan'>Канал CRSF:</label>";
     html += "<select name='srv_chan' id='srv_chan'>";
     for (int i = 1; i <= 16; i++) {
@@ -154,6 +154,11 @@ void WebServerHandler::_handleRoot() {
     html += "</select>";
 
     html += "<label class='checkbox-label'>";
+    String checkedInvL = config.servoInvertLeft ? "checked" : "";
+    html += "<input type='checkbox' name='srv_inv_l' value='1' id='srv_inv_l' " + checkedInvL + "> Інвертувати лівий сервопривід (GPIO 4)";
+    html += "</label>";
+
+    html += "<label class='checkbox-label'>";
     String checkedInv = config.servoInvertRight ? "checked" : "";
     html += "<input type='checkbox' name='srv_inv' value='1' id='srv_inv' " + checkedInv + "> Інвертувати правий сервопривід (GPIO 13)";
     html += "</label>";
@@ -165,9 +170,11 @@ void WebServerHandler::_handleRoot() {
 
     html += "<hr>";
 
-    // 2. MOSFET Config
-    html += "<h3>2. Налаштування Мосфета (GPIO 25, Extra GPIO 26)</h3>";
-    html += "<label for='mos_chan'>Канал CRSF:</label>";
+    // 2. MOSFET Switch Config (GPIO 25)
+    html += "<h3>2. Налаштування Мосфета та Кінцевика Серво (GPIO 25, Extra GPIO 26)</h3>";
+    html += "<p style='font-size: 14px; color: #666; margin-bottom: 15px;'>GPIO 25 тепер налаштований як вхідний кінцевий вимикач. При його натисканні (з'єднанні з GND) сервоприводи автоматично рухаються вверх.</p>";
+
+    html += "<label for='mos_chan'>Канал CRSF для активації Extra Pin:</label>";
     html += "<select name='mos_chan' id='mos_chan'>";
     for (int i = 1; i <= 16; i++) {
         String selected = (config.mosfetChannel == i) ? "selected" : "";
@@ -175,7 +182,7 @@ void WebServerHandler::_handleRoot() {
     }
     html += "</select>";
 
-    html += "<label for='mos_trig'>Положення тумблера для активації:</label>";
+    html += "<label for='mos_trig'>Положення тумблера для активації Extra Pin:</label>";
     html += "<select name='mos_trig' id='mos_trig'>";
     for (int i = 0; i < 3; i++) {
         String selected = (config.mosfetTrigger == positions[i]) ? "selected" : "";
@@ -183,7 +190,7 @@ void WebServerHandler::_handleRoot() {
     }
     html += "</select>";
 
-    html += "<label for='mos_off'>Сигнал вимкнення мосфета (при спрацюванні кінцевиків):</label>";
+    html += "<label for='mos_off'>Сигнал вимкнення Extra Pin (при спрацюванні кінцевиків):</label>";
     html += "<select name='mos_off' id='mos_off'>";
     String selLow = (config.mosfetOffLevel == 0) ? "selected" : "";
     String selHigh = (config.mosfetOffLevel == 1) ? "selected" : "";
@@ -222,6 +229,7 @@ void WebServerHandler::_handleSave() {
         RxConfig newConfig;
         newConfig.servoChannel = _server.arg("srv_chan").toInt();
         newConfig.servoTrigger = _server.arg("srv_trig").toInt();
+        newConfig.servoInvertLeft = _server.hasArg("srv_inv_l") ? 1 : 0;
         newConfig.servoInvertRight = _server.hasArg("srv_inv") ? 1 : 0;
         newConfig.servoMin = _server.arg("srv_min").toInt();
         newConfig.servoMax = _server.arg("srv_max").toInt();
