@@ -41,34 +41,34 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     Serial.printf("[PWM] Initialized LEDC on LeftServo=%d, RightServo=%d | MosfetSwitchPin=%d, Extra=%d, LED=%d, UpperSw=%d, LowerSw=%d\n",
                   _leftServoPin, _rightServoPin, _mosfetPin, _extraPin, _ledPin, _upperSwPin, _lowerSwPin);
 
-    // Startup test sequence: sweep servos slowly and synchronously to verify hardware (1000us -> 1500us -> 1000us at 500us/60s)
-    Serial.println("[PWM] Running synchronized boot-up diagnostics sweep (1000us -> 1500us -> 1000us)...");
+    // Startup test sequence: sweep servos slowly and synchronously to verify hardware (1000us -> 1300us -> 1000us)
+    Serial.println("[PWM] Running synchronized boot-up diagnostics sweep (1000us -> 1300us -> 1000us)...");
 
     // Initialize starting positions
     _currentLeftUs = 1000.0f;
     _currentRightUs = 1000.0f;
     _lastUpdateMs = millis();
 
-    // Step 1: Sweep slowly UP from 1000us to 1500us
-    Serial.println("[PWM] Sweeping UP (1000 -> 1500)...");
+    // Step 1: Sweep slowly UP from 1000us to 1300us
+    Serial.println("[PWM] Sweeping UP (1000 -> 1300)...");
     while (true) {
-        updateServos(true, 1000, 1500, invertLeft, invertRight);
+        updateServos(true, 1000, 1300, invertLeft, invertRight);
 
-        // Break once we've reached the target of 1500us
-        float leftTarget = invertLeft ? 1000.0f : 1500.0f;
+        // Break once we've reached the target of 1300us
+        float leftTarget = invertLeft ? 1000.0f : 1300.0f;
         if (abs(_currentLeftUs - leftTarget) < 0.1f) {
             break;
         }
         delay(15); // Short non-blocking-like delay to step smoothly
     }
 
-    // Step 2: Sweep slowly DOWN from 1500us to 1000us
-    Serial.println("[PWM] Sweeping DOWN (1500 -> 1000)...");
+    // Step 2: Sweep slowly DOWN from 1300us to 1000us
+    Serial.println("[PWM] Sweeping DOWN (1300 -> 1000)...");
     while (true) {
-        updateServos(false, 1000, 1500, invertLeft, invertRight);
+        updateServos(false, 1000, 1300, invertLeft, invertRight);
 
         // Break once we've reached the target of 1000us
-        float leftTarget = invertLeft ? 1500.0f : 1000.0f;
+        float leftTarget = invertLeft ? 1300.0f : 1000.0f;
         if (abs(_currentLeftUs - leftTarget) < 0.1f) {
             break;
         }
@@ -120,9 +120,9 @@ void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, 
     if (elapsed > 0) {
         _lastUpdateMs = now;
 
-        // Controlled speed step: 500us change per 60,000ms (500us range over exactly 60 seconds)
-        // Rate: 500.0f / 60000.0f = 1.0f / 120.0f = 0.008333333f microseconds per millisecond.
-        float maxStep = (float)elapsed * (1.0f / 120.0f);
+        // Controlled speed step: 200us change per 90,000ms (200us range over exactly 90 seconds)
+        // Rate: 200.0f / 90000.0f = 1.0f / 450.0f = 0.002222222f microseconds per millisecond.
+        float maxStep = (float)elapsed * (1.0f / 450.0f);
 
         // Smoothly adjust Left Servo
         if (_currentLeftUs < leftTarget) {

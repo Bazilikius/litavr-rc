@@ -6,7 +6,7 @@ ConfigManager::ConfigManager() {
     _currentConfig.servoInvertLeft = 0;
     _currentConfig.servoInvertRight = 0;
     _currentConfig.servoMin = 1000;
-    _currentConfig.servoMax = 1500; // Default maximum set to 1500us
+    _currentConfig.servoMax = 1300; // Default maximum set to 1300us (range restricted to 1000us-1300us)
     _currentConfig.loraFreq = 433000000;
 
     _currentConfig.upperSwPolarity = 1;   // default Active HIGH (Open)
@@ -21,7 +21,7 @@ void ConfigManager::begin() {
     _currentConfig.servoInvertLeft = _prefs.getUChar("srv_inv_l", 0);
     _currentConfig.servoInvertRight = _prefs.getUChar("srv_inv", 0);
     _currentConfig.servoMin = _prefs.getUShort("srv_min", 1000);
-    _currentConfig.servoMax = _prefs.getUShort("srv_max", 1500); // Default to 1500us
+    _currentConfig.servoMax = _prefs.getUShort("srv_max", 1300); // Default to 1300us
     _currentConfig.loraFreq = _prefs.getUInt("lora_freq", 433000000);
 
     _currentConfig.upperSwPolarity = _prefs.getUChar("up_pol", 1);
@@ -31,7 +31,7 @@ void ConfigManager::begin() {
     // Validate ranges
     if (_currentConfig.servoChannel < 1 || _currentConfig.servoChannel > 16) _currentConfig.servoChannel = 16;
     if (_currentConfig.servoMin < 500 || _currentConfig.servoMin > 2500) _currentConfig.servoMin = 1000;
-    if (_currentConfig.servoMax < 500 || _currentConfig.servoMax > 2500) _currentConfig.servoMax = 1500;
+    if (_currentConfig.servoMax < 500 || _currentConfig.servoMax > 2500) _currentConfig.servoMax = 1300;
 
     if (_currentConfig.loraFreq < 100000000 || _currentConfig.loraFreq > 1000000000) {
         _currentConfig.loraFreq = 433000000;
