@@ -9,7 +9,8 @@
 #define RIGHT_LEDC_CHAN 1
 
 PwmController::PwmController(uint8_t leftServoPin, uint8_t rightServoPin, uint8_t mosfetPin, uint8_t extraPin, uint8_t ledPin, uint8_t upperSwPin, uint8_t lowerSwPin)
-    : _leftServoPin(leftServoPin), _rightServoPin(rightServoPin), _mosfetPin(mosfetPin), _extraPin(extraPin), _ledPin(ledPin), _upperSwPin(upperSwPin), _lowerSwPin(lowerSwPin) {}
+    : _leftServoPin(leftServoPin), _rightServoPin(rightServoPin), _mosfetPin(mosfetPin), _extraPin(extraPin), _ledPin(ledPin), _upperSwPin(upperSwPin), _lowerSwPin(lowerSwPin),
+      _currentLeftUs(0), _currentRightUs(0), _lastUpdateMs(0) {}
 
 void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uint16_t maxUs) {
     // Other digital outputs
@@ -40,16 +41,19 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     Serial.printf("[PWM] Initialized LEDC on LeftServo=%d, RightServo=%d | MosfetSwitchPin=%d, Extra=%d, LED=%d, UpperSw=%d, LowerSw=%d\n",
                   _leftServoPin, _rightServoPin, _mosfetPin, _extraPin, _ledPin, _upperSwPin, _lowerSwPin);
 
-    // Startup test sequence: sweep servos synchronously and toggle outputs to verify hardware
+    // Startup test sequence: sweep servos slowly and synchronously to verify hardware
     Serial.println("[PWM] Running synchronized boot-up diagnostics sweep...");
 
     // Sweep: Neutral -> Active -> Neutral
     updateServos(false, minUs, maxUs, invertLeft, invertRight); // Inactive / Neutral (DOWN)
-    delay(500);
+    delay(800);
+    // Since we want the sweep to complete, let's step it manually or let it run in loop
+    _currentLeftUs = invertLeft ? maxUs : minUs;
+    _currentRightUs = invertRight ? maxUs : minUs;
     updateServos(true, minUs, maxUs, invertLeft, invertRight);  // Active / UP
-    delay(500);
+    delay(800);
     updateServos(false, minUs, maxUs, invertLeft, invertRight); // Inactive / Neutral (DOWN)
-    delay(500);
+    delay(800);
 
     // Toggle Extra & LED
     digitalWrite(_extraPin, HIGH);
@@ -77,14 +81,58 @@ bool PwmController::isMosfetSwPressed() {
 
 void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, bool invertLeft, bool invertRight) {
     // Inversion of both servos implemented in exactly two lines of code:
-    uint32_t leftVal = invertLeft ? (isActive ? minUs : maxUs) : (isActive ? maxUs : minUs);
-    uint32_t rightVal = invertRight ? (isActive ? minUs : maxUs) : (isActive ? maxUs : minUs);
+    uint32_t leftTarget = invertLeft ? (isActive ? minUs : maxUs) : (isActive ? maxUs : minUs);
+    uint32_t rightTarget = invertRight ? (isActive ? minUs : maxUs) : (isActive ? maxUs : minUs);
 
-    leftVal = constrain(leftVal, 500, 2500);
-    rightVal = constrain(rightVal, 500, 2500);
+    leftTarget = constrain(leftTarget, 500, 2500);
+    rightTarget = constrain(rightTarget, 500, 2500);
 
-    writeMicros(_leftServoPin, leftVal);
-    writeMicros(_rightServoPin, rightVal);
+    // Initialize current positions on the first run
+    if (_currentLeftUs == 0 || _currentRightUs == 0) {
+        _currentLeftUs = leftTarget;
+        _currentRightUs = rightTarget;
+        _lastUpdateMs = millis();
+    }
+
+    uint32_t now = millis();
+    uint32_t elapsed = now - _lastUpdateMs;
+
+    if (elapsed > 0) {
+        _lastUpdateMs = now;
+
+        // Controlled speed step: 0.8us per millisecond (creates silky smooth slow sweeps, e.g. 1000us takes ~1.2s)
+        uint32_t maxStep = (elapsed * 8) / 10;
+        if (maxStep < 1) maxStep = 1;
+
+        // Smoothly adjust Left Servo
+        if (_currentLeftUs < leftTarget) {
+            _currentLeftUs += maxStep;
+            if (_currentLeftUs > leftTarget) _currentLeftUs = leftTarget;
+        } else if (_currentLeftUs > leftTarget) {
+            if (_currentLeftUs > maxStep) {
+                _currentLeftUs -= maxStep;
+            } else {
+                _currentLeftUs = leftTarget;
+            }
+            if (_currentLeftUs < leftTarget) _currentLeftUs = leftTarget;
+        }
+
+        // Smoothly adjust Right Servo
+        if (_currentRightUs < rightTarget) {
+            _currentRightUs += maxStep;
+            if (_currentRightUs > rightTarget) _currentRightUs = rightTarget;
+        } else if (_currentRightUs > rightTarget) {
+            if (_currentRightUs > maxStep) {
+                _currentRightUs -= maxStep;
+            } else {
+                _currentRightUs = rightTarget;
+            }
+            if (_currentRightUs < rightTarget) _currentRightUs = rightTarget;
+        }
+    }
+
+    writeMicros(_leftServoPin, _currentLeftUs);
+    writeMicros(_rightServoPin, _currentRightUs);
 }
 
 void PwmController::updateOutputs(bool isActive, uint8_t offLevel) {

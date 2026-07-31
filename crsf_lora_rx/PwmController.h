@@ -17,7 +17,7 @@ public:
     // Returns true if the switch on GPIO 25 (former mosfet pin) is pressed (reads LOW)
     bool isMosfetSwPressed();
 
-    // Updates physical servo values based on activation state and configuration, respecting left/right inversions (using 2-line inversion logic)
+    // Updates physical servo values based on activation state and configuration, respecting left/right inversions (using 2-line inversion logic with smooth speed limiting)
     void updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, bool invertLeft, bool invertRight);
 
     // Updates Extra Pin value
@@ -34,6 +34,11 @@ private:
     uint8_t _ledPin;
     uint8_t _upperSwPin;
     uint8_t _lowerSwPin;
+
+    // Smooth servo speed-limiting state variables
+    uint32_t _currentLeftUs;
+    uint32_t _currentRightUs;
+    uint32_t _lastUpdateMs;
 };
 
 #endif
