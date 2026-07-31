@@ -35,9 +35,9 @@ private:
     uint8_t _upperSwPin;
     uint8_t _lowerSwPin;
 
-    // Smooth servo speed-limiting state variables
-    uint32_t _currentLeftUs;
-    uint32_t _currentRightUs;
+    // Smooth servo speed-limiting state variables (using floats for high precision sub-microsecond rate-limiting)
+    float _currentLeftUs;
+    float _currentRightUs;
     uint32_t _lastUpdateMs;
 };
 

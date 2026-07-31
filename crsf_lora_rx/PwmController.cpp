@@ -10,7 +10,7 @@
 
 PwmController::PwmController(uint8_t leftServoPin, uint8_t rightServoPin, uint8_t mosfetPin, uint8_t extraPin, uint8_t ledPin, uint8_t upperSwPin, uint8_t lowerSwPin)
     : _leftServoPin(leftServoPin), _rightServoPin(rightServoPin), _mosfetPin(mosfetPin), _extraPin(extraPin), _ledPin(ledPin), _upperSwPin(upperSwPin), _lowerSwPin(lowerSwPin),
-      _currentLeftUs(0), _currentRightUs(0), _lastUpdateMs(0) {}
+      _currentLeftUs(0.0f), _currentRightUs(0.0f), _lastUpdateMs(0) {}
 
 void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uint16_t maxUs) {
     // Other digital outputs
@@ -44,16 +44,17 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     // Startup test sequence: sweep servos slowly and synchronously to verify hardware
     Serial.println("[PWM] Running synchronized boot-up diagnostics sweep...");
 
-    // Sweep: Neutral -> Active -> Neutral
+    // Sweep: Neutral -> Active -> Neutral (Since sweep is at boot and delay is short, we let them jump slightly faster for testing or keep them slow)
     updateServos(false, minUs, maxUs, invertLeft, invertRight); // Inactive / Neutral (DOWN)
-    delay(800);
-    // Since we want the sweep to complete, let's step it manually or let it run in loop
+    delay(500);
+    _currentLeftUs = invertLeft ? minUs : maxUs;
+    _currentRightUs = invertRight ? minUs : maxUs;
+    updateServos(true, minUs, maxUs, invertLeft, invertRight);  // Active / UP
+    delay(500);
     _currentLeftUs = invertLeft ? maxUs : minUs;
     _currentRightUs = invertRight ? maxUs : minUs;
-    updateServos(true, minUs, maxUs, invertLeft, invertRight);  // Active / UP
-    delay(800);
     updateServos(false, minUs, maxUs, invertLeft, invertRight); // Inactive / Neutral (DOWN)
-    delay(800);
+    delay(500);
 
     // Toggle Extra & LED
     digitalWrite(_extraPin, HIGH);
@@ -81,14 +82,14 @@ bool PwmController::isMosfetSwPressed() {
 
 void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, bool invertLeft, bool invertRight) {
     // Inversion of both servos implemented in exactly two lines of code:
-    uint32_t leftTarget = invertLeft ? (isActive ? minUs : maxUs) : (isActive ? maxUs : minUs);
-    uint32_t rightTarget = invertRight ? (isActive ? minUs : maxUs) : (isActive ? maxUs : minUs);
+    float leftTarget = (float)(invertLeft ? (isActive ? minUs : maxUs) : (isActive ? maxUs : minUs));
+    float rightTarget = (float)(invertRight ? (isActive ? minUs : maxUs) : (isActive ? maxUs : minUs));
 
-    leftTarget = constrain(leftTarget, 500, 2500);
-    rightTarget = constrain(rightTarget, 500, 2500);
+    leftTarget = constrain(leftTarget, 500.0f, 2500.0f);
+    rightTarget = constrain(rightTarget, 500.0f, 2500.0f);
 
     // Initialize current positions on the first run
-    if (_currentLeftUs == 0 || _currentRightUs == 0) {
+    if (_currentLeftUs == 0.0f || _currentRightUs == 0.0f) {
         _currentLeftUs = leftTarget;
         _currentRightUs = rightTarget;
         _lastUpdateMs = millis();
@@ -100,20 +101,16 @@ void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, 
     if (elapsed > 0) {
         _lastUpdateMs = now;
 
-        // Controlled speed step: 0.8us per millisecond (creates silky smooth slow sweeps, e.g. 1000us takes ~1.2s)
-        uint32_t maxStep = (elapsed * 8) / 10;
-        if (maxStep < 1) maxStep = 1;
+        // Controlled speed step: 1.0us change per 30,000ms (1000us range over exactly 30 seconds)
+        // Rate: 1000.0f / 30000.0f = 1.0f / 30.0f = 0.03333333f microseconds per millisecond.
+        float maxStep = (float)elapsed * (1.0f / 30.0f);
 
         // Smoothly adjust Left Servo
         if (_currentLeftUs < leftTarget) {
             _currentLeftUs += maxStep;
             if (_currentLeftUs > leftTarget) _currentLeftUs = leftTarget;
         } else if (_currentLeftUs > leftTarget) {
-            if (_currentLeftUs > maxStep) {
-                _currentLeftUs -= maxStep;
-            } else {
-                _currentLeftUs = leftTarget;
-            }
+            _currentLeftUs -= maxStep;
             if (_currentLeftUs < leftTarget) _currentLeftUs = leftTarget;
         }
 
@@ -122,17 +119,13 @@ void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, 
             _currentRightUs += maxStep;
             if (_currentRightUs > rightTarget) _currentRightUs = rightTarget;
         } else if (_currentRightUs > rightTarget) {
-            if (_currentRightUs > maxStep) {
-                _currentRightUs -= maxStep;
-            } else {
-                _currentRightUs = rightTarget;
-            }
+            _currentRightUs -= maxStep;
             if (_currentRightUs < rightTarget) _currentRightUs = rightTarget;
         }
     }
 
-    writeMicros(_leftServoPin, _currentLeftUs);
-    writeMicros(_rightServoPin, _currentRightUs);
+    writeMicros(_leftServoPin, (uint32_t)_currentLeftUs);
+    writeMicros(_rightServoPin, (uint32_t)_currentRightUs);
 }
 
 void PwmController::updateOutputs(bool isActive, uint8_t offLevel) {
