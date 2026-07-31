@@ -3,12 +3,16 @@
  * - Receives channel broadcast from Transmitter via SX127x LoRa Module.
  * - Controls 2 synchronous servos (Left on GPIO 4, Right on GPIO 13) with Left and Right software inversions.
  * - Controls Extra Pin on GPIO 26 (replicates the active/trigger level of the servos).
+ * - Controls Power Key Pin on GPIO 15 (outputs 0V/5V) with a 60-second delay logic.
  * - Monitor 3 Limit Switches:
  *   1. Upper (GPIO 32) using INPUT_PULLUP.
  *   2. Lower (GPIO 33) using INPUT_PULLUP.
  *   3. Servo UP Switch (GPIO 25) using INPUT_PULLUP.
  * - LED (GPIO 27) lights up when Upper Limit Switch is open (reads HIGH).
  * - If Servo UP Switch (GPIO 25) is pressed (reads LOW), servos are overridden and driven UP (active position).
+ * - Power Key Pin (GPIO 15) is set HIGH only if:
+ *   a) 60 seconds have elapsed since the CRSF channel commanded the servos to go DOWN.
+ *   b) AND simultaneously: Upper Switch is triggered (open/HIGH) AND Servo UP Switch (GPIO 25) is pressed (LOW).
  * - Hosts a local Web Configurator Access Point (AP SSID: "CRSF-Config-RX") with WiFi TX power reduced to 25%.
  */
 
@@ -27,6 +31,7 @@
 #define LED_PIN         27
 #define UPPER_SW_PIN    32
 #define LOWER_SW_PIN    33
+#define POWER_KEY_PIN   15 // Pin to control the 0V/+5V key
 
 // LoRa SPI Pin Configuration
 #define LORA_SS    5
@@ -53,6 +58,9 @@ uint32_t lastLowerSwTime = 0;
 bool debouncedUpperSw = false;
 bool debouncedLowerSw = false;
 const uint32_t DEBOUNCE_DELAY_MS = 50; // 50ms stable window
+
+// Timer for the 60-second power key delay
+uint32_t loweredTimestamp = 0;
 
 struct LoraPacket {
     uint16_t signature; // 0x55AA
@@ -86,6 +94,11 @@ void setup() {
     for (int i = 0; i < 16; i++) {
         channels[i] = 1500;
     }
+
+    // Initialize Power Key Pin
+    pinMode(POWER_KEY_PIN, OUTPUT);
+    digitalWrite(POWER_KEY_PIN, LOW);
+    Serial.printf("Power Key initialized on GPIO %d (set to LOW).\n", POWER_KEY_PIN);
 
     // Load configurations
     configManager.begin();
@@ -157,7 +170,17 @@ void loop() {
     // 4. Run Trigger Logic and update Servos/Extra Pin
     RxConfig activeConfig = configManager.getConfig();
 
-    bool servoActive = isTriggerActive(channels[activeConfig.servoChannel - 1], activeConfig.servoTrigger);
+    // Check CRSF channel state independently for the 60-second power-down delay
+    bool crsfServoActive = isTriggerActive(channels[activeConfig.servoChannel - 1], activeConfig.servoTrigger);
+    if (!crsfServoActive) {
+        if (loweredTimestamp == 0) {
+            loweredTimestamp = millis();
+        }
+    } else {
+        loweredTimestamp = 0; // Reset
+    }
+
+    bool servoActive = crsfServoActive;
 
     // Override servos to move UP if the physical limit switch on GPIO 25 is pressed (reads LOW)
     bool servoUpSwPressed = controller.isMosfetSwPressed();
@@ -168,6 +191,13 @@ void loop() {
     // Replicate active servo state to Extra Pin (GPIO 26): HIGH when active (servos UP), LOW when inactive (servos DOWN)
     digitalWrite(EXTRA_PIN, servoActive ? HIGH : LOW);
 
+    // 60-second delay logic for Power Key:
+    // Activates (HIGH) 60 seconds after the CRSF channel commands servos to go DOWN,
+    // AND simultaneously: Upper limit switch is triggered (open/HIGH) AND manual switch (GPIO 25) is pressed (LOW).
+    bool elapsed60s = (loweredTimestamp != 0 && (millis() - loweredTimestamp >= 60000));
+    bool powerKeyOn = elapsed60s && upperSwOpen && servoUpSwPressed;
+    digitalWrite(POWER_KEY_PIN, powerKeyOn ? HIGH : LOW);
+
     // Update Servos based on active state
     controller.updateServos(servoActive, activeConfig.servoMin, activeConfig.servoMax, activeConfig.servoInvertLeft != 0, activeConfig.servoInvertRight != 0);
 
@@ -176,12 +206,15 @@ void loop() {
 
     // 5. Diagnostics reporting
     if (millis() - lastReport > 5000) {
-        Serial.printf("[RX] Received LoRa: %u | UpperSw: %s | LowerSw: %s | ServoUpSw: %s | ServosActive (UP): %s\n",
+        uint32_t secondsDown = (loweredTimestamp != 0) ? (millis() - loweredTimestamp) / 1000 : 0;
+        Serial.printf("[RX] Received LoRa: %u | UpperSw: %s | LowerSw: %s | ServoUpSw: %s | ServosActive (UP): %s | PowerKey (GPIO 15): %s (Down for %u s)\n",
                       packetCount,
                       upperSwOpen ? "OPEN (Triggered)" : "CLOSED (OK)",
                       lowerSwOpen ? "OPEN (Triggered)" : "CLOSED (OK)",
                       servoUpSwPressed ? "PRESSED" : "RELEASED",
-                      servoActive ? "YES" : "NO");
+                      servoActive ? "YES" : "NO",
+                      powerKeyOn ? "ON (5V)" : "OFF (0V)",
+                      secondsDown);
         lastReport = millis();
     }
 }
