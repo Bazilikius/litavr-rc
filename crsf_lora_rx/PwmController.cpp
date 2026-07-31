@@ -1,18 +1,17 @@
 #include "PwmController.h"
+#include <esp_arduino_version.h>
 
 #define PWM_FREQ 50
-#define PWM_RES 12
+#define PWM_RES 16 // 16-bit resolution for maximum precision (0 - 65535)
+
+// LEDC channels for Core 2.x
+#define LEFT_LEDC_CHAN 0
+#define RIGHT_LEDC_CHAN 1
 
 PwmController::PwmController(uint8_t leftServoPin, uint8_t rightServoPin, uint8_t mosfetPin, uint8_t extraPin, uint8_t ledPin, uint8_t upperSwPin, uint8_t lowerSwPin)
     : _leftServoPin(leftServoPin), _rightServoPin(rightServoPin), _mosfetPin(mosfetPin), _extraPin(extraPin), _ledPin(ledPin), _upperSwPin(upperSwPin), _lowerSwPin(lowerSwPin) {}
 
 void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uint16_t maxUs) {
-    // Servos
-    analogWriteFrequency(_leftServoPin, PWM_FREQ);
-    analogWriteResolution(_leftServoPin, PWM_RES);
-    analogWriteFrequency(_rightServoPin, PWM_FREQ);
-    analogWriteResolution(_rightServoPin, PWM_RES);
-
     // Other digital outputs
     pinMode(_extraPin, OUTPUT);
     pinMode(_ledPin, OUTPUT);
@@ -24,18 +23,32 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     pinMode(_upperSwPin, INPUT_PULLUP);
     pinMode(_lowerSwPin, INPUT_PULLUP);
 
-    Serial.printf("[PWM] Initialized LeftServo=%d, RightServo=%d, MosfetSwitchPin=%d, Extra=%d, LED=%d, UpperSw=%d, LowerSw=%d\n",
+    // Setup LEDC PWM on ESP32
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
+    // Arduino ESP32 Core 3.x APIs
+    ledcAttach(_leftServoPin, PWM_FREQ, PWM_RES);
+    ledcAttach(_rightServoPin, PWM_FREQ, PWM_RES);
+#else
+    // Arduino ESP32 Core 2.x APIs
+    ledcSetup(LEFT_LEDC_CHAN, PWM_FREQ, PWM_RES);
+    ledcAttachPin(_leftServoPin, LEFT_LEDC_CHAN);
+
+    ledcSetup(RIGHT_LEDC_CHAN, PWM_FREQ, PWM_RES);
+    ledcAttachPin(_rightServoPin, RIGHT_LEDC_CHAN);
+#endif
+
+    Serial.printf("[PWM] Initialized LEDC on LeftServo=%d, RightServo=%d | MosfetSwitchPin=%d, Extra=%d, LED=%d, UpperSw=%d, LowerSw=%d\n",
                   _leftServoPin, _rightServoPin, _mosfetPin, _extraPin, _ledPin, _upperSwPin, _lowerSwPin);
 
     // Startup test sequence: sweep servos synchronously and toggle outputs to verify hardware
     Serial.println("[PWM] Running synchronized boot-up diagnostics sweep...");
 
     // Sweep: Neutral -> Active -> Neutral
-    updateServos(false, minUs, maxUs, invertLeft, invertRight); // Inactive / Neutral
+    updateServos(false, minUs, maxUs, invertLeft, invertRight); // Inactive / Neutral (DOWN)
     delay(500);
     updateServos(true, minUs, maxUs, invertLeft, invertRight);  // Active / UP
     delay(500);
-    updateServos(false, minUs, maxUs, invertLeft, invertRight); // Inactive / Neutral
+    updateServos(false, minUs, maxUs, invertLeft, invertRight); // Inactive / Neutral (DOWN)
     delay(500);
 
     // Toggle Extra & LED
@@ -89,7 +102,16 @@ void PwmController::updateOutputs(bool isActive, uint8_t offLevel) {
 }
 
 void PwmController::writeMicros(uint8_t pin, uint32_t us) {
-    // Convert microseconds to duty cycle (12-bit, 50Hz)
-    uint32_t duty = (us * 4095) / 20000;
-    analogWrite(pin, duty);
+    // Convert microseconds to duty cycle (16-bit, 50Hz)
+    // 50Hz period is 20000 microseconds. 16-bit max duty is 65535.
+    uint32_t duty = (us * 65535) / 20000;
+
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
+    // Arduino ESP32 Core 3.x
+    ledcWrite(pin, duty);
+#else
+    // Arduino ESP32 Core 2.x
+    uint8_t chan = (pin == _leftServoPin) ? LEFT_LEDC_CHAN : RIGHT_LEDC_CHAN;
+    ledcWrite(chan, duty);
+#endif
 }

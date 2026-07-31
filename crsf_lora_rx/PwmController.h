@@ -23,7 +23,7 @@ public:
     // Updates Extra Pin value
     void updateOutputs(bool isActive, uint8_t offLevel);
 
-    // Utility to write microsecond values to a pin using analogWrite
+    // Utility to write microsecond values to a pin using ESP32 ledc peripheral
     void writeMicros(uint8_t pin, uint32_t us);
 
 private:
