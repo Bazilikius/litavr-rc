@@ -101,9 +101,9 @@ void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, 
     if (elapsed > 0) {
         _lastUpdateMs = now;
 
-        // Controlled speed step: 1.0us change per 30,000ms (1000us range over exactly 30 seconds)
-        // Rate: 1000.0f / 30000.0f = 1.0f / 30.0f = 0.03333333f microseconds per millisecond.
-        float maxStep = (float)elapsed * (1.0f / 30.0f);
+        // Controlled speed step: 500us change per 60,000ms (500us range over exactly 60 seconds)
+        // Rate: 500.0f / 60000.0f = 1.0f / 120.0f = 0.008333333f microseconds per millisecond.
+        float maxStep = (float)elapsed * (1.0f / 120.0f);
 
         // Smoothly adjust Left Servo
         if (_currentLeftUs < leftTarget) {
