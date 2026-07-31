@@ -41,20 +41,39 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     Serial.printf("[PWM] Initialized LEDC on LeftServo=%d, RightServo=%d | MosfetSwitchPin=%d, Extra=%d, LED=%d, UpperSw=%d, LowerSw=%d\n",
                   _leftServoPin, _rightServoPin, _mosfetPin, _extraPin, _ledPin, _upperSwPin, _lowerSwPin);
 
-    // Startup test sequence: sweep servos slowly and synchronously to verify hardware
-    Serial.println("[PWM] Running synchronized boot-up diagnostics sweep...");
+    // Startup test sequence: sweep servos slowly and synchronously to verify hardware (1000us -> 1500us -> 1000us at 500us/60s)
+    Serial.println("[PWM] Running synchronized boot-up diagnostics sweep (1000us -> 1500us -> 1000us)...");
 
-    // Sweep: Neutral -> Active -> Neutral (Since sweep is at boot and delay is short, we let them jump slightly faster for testing or keep them slow)
-    updateServos(false, minUs, maxUs, invertLeft, invertRight); // Inactive / Neutral (DOWN)
-    delay(500);
-    _currentLeftUs = invertLeft ? minUs : maxUs;
-    _currentRightUs = invertRight ? minUs : maxUs;
-    updateServos(true, minUs, maxUs, invertLeft, invertRight);  // Active / UP
-    delay(500);
-    _currentLeftUs = invertLeft ? maxUs : minUs;
-    _currentRightUs = invertRight ? maxUs : minUs;
-    updateServos(false, minUs, maxUs, invertLeft, invertRight); // Inactive / Neutral (DOWN)
-    delay(500);
+    // Initialize starting positions
+    _currentLeftUs = 1000.0f;
+    _currentRightUs = 1000.0f;
+    _lastUpdateMs = millis();
+
+    // Step 1: Sweep slowly UP from 1000us to 1500us
+    Serial.println("[PWM] Sweeping UP (1000 -> 1500)...");
+    while (true) {
+        updateServos(true, 1000, 1500, invertLeft, invertRight);
+
+        // Break once we've reached the target of 1500us
+        float leftTarget = invertLeft ? 1000.0f : 1500.0f;
+        if (abs(_currentLeftUs - leftTarget) < 0.1f) {
+            break;
+        }
+        delay(15); // Short non-blocking-like delay to step smoothly
+    }
+
+    // Step 2: Sweep slowly DOWN from 1500us to 1000us
+    Serial.println("[PWM] Sweeping DOWN (1500 -> 1000)...");
+    while (true) {
+        updateServos(false, 1000, 1500, invertLeft, invertRight);
+
+        // Break once we've reached the target of 1000us
+        float leftTarget = invertLeft ? 1500.0f : 1000.0f;
+        if (abs(_currentLeftUs - leftTarget) < 0.1f) {
+            break;
+        }
+        delay(15); // Short non-blocking-like delay to step smoothly
+    }
 
     // Toggle Extra & LED
     digitalWrite(_extraPin, HIGH);
