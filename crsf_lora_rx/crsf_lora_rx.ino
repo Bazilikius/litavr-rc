@@ -2,16 +2,14 @@
  * CRSF LoRa Receiver & Outputs Controller for ESP32 (Dev Module)
  * - Receives channel broadcast from Transmitter via SX127x LoRa Module.
  * - Controls 2 synchronous servos (Left on GPIO 4, Right on GPIO 13) with Left and Right software inversions.
- * - Controls Extra Pin on GPIO 26 (replicates the active/trigger level of CRSF channel).
+ * - Controls Extra Pin on GPIO 26 (replicates the active/trigger level of the servos).
  * - Monitor 3 Limit Switches:
  *   1. Upper (GPIO 32) using INPUT_PULLUP.
  *   2. Lower (GPIO 33) using INPUT_PULLUP.
- *   3. Servo UP Switch (GPIO 25) using INPUT_PULLUP - formerly MOSFET output.
- * - If at least one safety limit switch (Upper/Lower) is open (reads HIGH), Extra Pin is forced to configured Off Level (HIGH/LOW).
- * - LED (GPIO 27) lights up when Upper Limit Switch is open.
+ *   3. Servo UP Switch (GPIO 25) using INPUT_PULLUP.
+ * - LED (GPIO 27) lights up when Upper Limit Switch is open (reads HIGH).
  * - If Servo UP Switch (GPIO 25) is pressed (reads LOW), servos are overridden and driven UP (active position).
  * - Hosts a local Web Configurator Access Point (AP SSID: "CRSF-Config-RX") with WiFi TX power reduced to 25%.
- * - Supports "All one channel" configuration option to duplicate settings.
  */
 
 #include <Arduino.h>
@@ -160,7 +158,6 @@ void loop() {
     RxConfig activeConfig = configManager.getConfig();
 
     bool servoActive = isTriggerActive(channels[activeConfig.servoChannel - 1], activeConfig.servoTrigger);
-    bool mosfetActive = isTriggerActive(channels[activeConfig.mosfetChannel - 1], activeConfig.mosfetTrigger);
 
     // Override servos to move UP if the physical limit switch on GPIO 25 is pressed (reads LOW)
     bool servoUpSwPressed = controller.isMosfetSwPressed();
@@ -168,18 +165,10 @@ void loop() {
         servoActive = true;
     }
 
-    // Limit switch safety override (Upper/Lower switches block/override Extra Pin)
-    if (upperSwOpen || lowerSwOpen) {
-        overrideActive = true;
-        // Force Extra Pin to the safety Off Level
-        controller.updateOutputs(false, activeConfig.mosfetOffLevel);
-    } else {
-        overrideActive = false;
-        // Run normally
-        controller.updateOutputs(mosfetActive, activeConfig.mosfetOffLevel);
-    }
+    // Replicate active servo state to Extra Pin (GPIO 26): HIGH when active (servos UP), LOW when inactive (servos DOWN)
+    digitalWrite(EXTRA_PIN, servoActive ? HIGH : LOW);
 
-    // Update Servos
+    // Update Servos based on active state
     controller.updateServos(servoActive, activeConfig.servoMin, activeConfig.servoMax, activeConfig.servoInvertLeft != 0, activeConfig.servoInvertRight != 0);
 
     // Yield to WiFi/TCP tasks
@@ -187,12 +176,11 @@ void loop() {
 
     // 5. Diagnostics reporting
     if (millis() - lastReport > 5000) {
-        Serial.printf("[RX] Received LoRa: %u | UpperSw: %s | LowerSw: %s | ServoUpSw: %s | Override: %s | ServoPairActive: %s\n",
+        Serial.printf("[RX] Received LoRa: %u | UpperSw: %s | LowerSw: %s | ServoUpSw: %s | ServosActive (UP): %s\n",
                       packetCount,
                       upperSwOpen ? "OPEN (Triggered)" : "CLOSED (OK)",
                       lowerSwOpen ? "OPEN (Triggered)" : "CLOSED (OK)",
                       servoUpSwPressed ? "PRESSED" : "RELEASED",
-                      overrideActive ? "ACTIVE" : "NONE",
                       servoActive ? "YES" : "NO");
         lastReport = millis();
     }

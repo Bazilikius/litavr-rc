@@ -17,7 +17,7 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     pinMode(_extraPin, OUTPUT);
     pinMode(_ledPin, OUTPUT);
 
-    // GPIO 25 is now a limit switch input with pullup!
+    // GPIO 25 is a limit switch input with pullup
     pinMode(_mosfetPin, INPUT_PULLUP);
 
     // Inputs with pullups
@@ -31,11 +31,11 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     Serial.println("[PWM] Running synchronized boot-up diagnostics sweep...");
 
     // Sweep: Neutral -> Active -> Neutral
-    updateServos(false, minUs, maxUs, invertLeft, invertRight); // Neutral
+    updateServos(false, minUs, maxUs, invertLeft, invertRight); // Inactive / Neutral
     delay(500);
-    updateServos(true, minUs, maxUs, invertLeft, invertRight);  // Active
+    updateServos(true, minUs, maxUs, invertLeft, invertRight);  // Active / UP
     delay(500);
-    updateServos(false, minUs, maxUs, invertLeft, invertRight); // Neutral
+    updateServos(false, minUs, maxUs, invertLeft, invertRight); // Inactive / Neutral
     delay(500);
 
     // Toggle Extra & LED
@@ -63,18 +63,9 @@ bool PwmController::isMosfetSwPressed() {
 }
 
 void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, bool invertLeft, bool invertRight) {
-    uint32_t leftVal;
-    uint32_t rightVal;
-
-    if (isActive) {
-        // Active state
-        leftVal = invertLeft ? minUs : maxUs;
-        rightVal = invertRight ? minUs : maxUs;
-    } else {
-        // Neutral/Zero position
-        leftVal = (minUs + maxUs) / 2;
-        rightVal = (minUs + maxUs) / 2;
-    }
+    // Inversion of both servos implemented in exactly two lines of code:
+    uint32_t leftVal = invertLeft ? (isActive ? minUs : maxUs) : (isActive ? maxUs : minUs);
+    uint32_t rightVal = invertRight ? (isActive ? minUs : maxUs) : (isActive ? maxUs : minUs);
 
     leftVal = constrain(leftVal, 500, 2500);
     rightVal = constrain(rightVal, 500, 2500);

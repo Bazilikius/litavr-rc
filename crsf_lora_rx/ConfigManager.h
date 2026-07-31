@@ -11,12 +11,6 @@ struct RxConfig {
     uint8_t servoInvertRight;  // 0 or 1, default 0
     uint16_t servoMin;         // 500-2500 us, default 1000
     uint16_t servoMax;         // 500-2500 us, default 2000
-
-    uint8_t mosfetChannel;     // 1-16, default 15
-    uint16_t mosfetTrigger;    // 1000, 1500, 2000, default 1000
-    uint8_t mosfetOffLevel;    // 0 = LOW, 1 = HIGH, default 0
-
-    uint8_t allOneChannel;     // 0 or 1, default 0
     uint32_t loraFreq;         // e.g. 433000000
 };
 
