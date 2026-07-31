@@ -8,12 +8,12 @@
  *   1. Upper (GPIO 32) using INPUT_PULLUP.
  *   2. Lower (GPIO 33) using INPUT_PULLUP.
  *   3. Servo UP Switch (GPIO 25) using INPUT_PULLUP.
- * - LED (GPIO 27) lights up when Upper Limit Switch is open (reads HIGH).
- * - If Servo UP Switch (GPIO 25) is open (reads HIGH), servos are overridden and driven UP (active position).
- * - If Servo UP Switch (GPIO 25) is closed (reads LOW), servos can be driven DOWN (following CRSF channel).
+ * - LED (GPIO 27) lights up when Upper Limit Switch is open/triggered.
+ * - All three switches have configurable active trigger polarities (Normally Open / Normally Closed).
+ * - If Servo UP Switch (GPIO 25) state matches its configured trigger polarity, servos are driven UP (active).
  * - Power Key Pin (GPIO 15) is set HIGH only if:
  *   a) 60 seconds have elapsed since the CRSF channel commanded the servos to go DOWN.
- *   b) AND simultaneously: ALL THREE limit switches are CLOSED (read LOW / connected to GND).
+ *   b) AND simultaneously: ALL THREE limit switches are in their non-triggered (Closed / Safe / OK) states.
  * - Hosts a local Web Configurator Access Point (AP SSID: "CRSF-Config-RX") with WiFi TX power reduced to 25%.
  */
 
@@ -49,18 +49,19 @@ LoraModule lora(LORA_SS, LORA_RST, LORA_DIO0);
 // Global shared variables
 uint32_t packetCount = 0;
 uint16_t channels[16];
-bool upperSwOpen = false;
-bool lowerSwOpen = false;
-bool overrideActive = false;
+bool upperSwOpen = false;       // Used to indicate Upper Switch active trigger state
+bool lowerSwOpen = false;       // Used to indicate Lower Switch active trigger state
+bool servoUpSwTriggered = false; // Used to indicate Servo UP Switch active trigger state
+bool overrideActive = false;    // Re-purposed to convey if the system is NOT fully closed/safe
 
 // Debounce variables for mechanical limit switches to prevent high-frequency EMI resets
 uint32_t lastUpperSwTime = 0;
 uint32_t lastLowerSwTime = 0;
 uint32_t lastMosfetSwTime = 0;
 
-bool debouncedUpperSw = false; // true = open (HIGH), false = closed (LOW)
-bool debouncedLowerSw = false; // true = open (HIGH), false = closed (LOW)
-bool debouncedMosfetSw = false; // true = open (HIGH), false = closed (LOW)
+bool debouncedUpperSw = false; // true = pin is HIGH, false = pin is LOW
+bool debouncedLowerSw = false; // true = pin is HIGH, false = pin is LOW
+bool debouncedMosfetSw = false; // true = pin is HIGH, false = pin is LOW
 
 const uint32_t DEBOUNCE_DELAY_MS = 50; // 50ms stable window
 
@@ -73,7 +74,7 @@ struct LoraPacket {
     uint16_t channels[16];
 } loraPacket;
 
-WebServerHandler webServer(configManager, packetCount, channels, upperSwOpen, lowerSwOpen, overrideActive);
+WebServerHandler webServer(configManager, packetCount, channels, upperSwOpen, lowerSwOpen, servoUpSwTriggered, overrideActive);
 
 uint32_t lastReport = 0;
 
@@ -176,15 +177,16 @@ void loop() {
         lastMosfetSwTime = millis();
     }
 
-    upperSwOpen = debouncedUpperSw;
-    lowerSwOpen = debouncedLowerSw;
-    bool servoUpSwOpen = debouncedMosfetSw; // HIGH = open, meaning move servos UP
-
-    // LED glows if Upper switch is open
-    digitalWrite(LED_PIN, upperSwOpen ? HIGH : LOW);
-
     // 4. Run Trigger Logic and update Servos/Extra Pin
     RxConfig activeConfig = configManager.getConfig();
+
+    // Evaluate switch states based on their configured polarities (0 = Active LOW/Closed, 1 = Active HIGH/Open)
+    upperSwOpen = (debouncedUpperSw == (activeConfig.upperSwPolarity != 0));
+    lowerSwOpen = (debouncedLowerSw == (activeConfig.lowerSwPolarity != 0));
+    servoUpSwTriggered = (debouncedMosfetSw == (activeConfig.servoUpSwPolarity != 0));
+
+    // LED glows if Upper switch is triggered
+    digitalWrite(LED_PIN, upperSwOpen ? HIGH : LOW);
 
     // Check CRSF channel state independently for the 60-second power-down delay
     bool crsfServoActive = isTriggerActive(channels[activeConfig.servoChannel - 1], activeConfig.servoTrigger);
@@ -198,8 +200,8 @@ void loop() {
 
     bool servoActive = crsfServoActive;
 
-    // Override servos to move UP if the physical limit switch on GPIO 25 is open (reads HIGH)
-    if (servoUpSwOpen) {
+    // Override servos to move UP if the physical limit switch on GPIO 25 is in its triggered state
+    if (servoUpSwTriggered) {
         servoActive = true;
     }
 
@@ -208,9 +210,11 @@ void loop() {
 
     // 60-second delay logic for Power Key (GPIO 15):
     // Activates (HIGH) 60 seconds after the CRSF channel commands servos to go DOWN,
-    // AND simultaneously: ALL THREE limit switches are CLOSED (read LOW / connected to GND).
+    // AND simultaneously: ALL THREE limit switches are in their non-triggered / safe / closed (OK) state.
     bool elapsed60s = (loweredTimestamp != 0 && (millis() - loweredTimestamp >= 60000));
-    bool allThreeClosed = (!upperSwOpen) && (!lowerSwOpen) && (!servoUpSwOpen);
+    bool allThreeClosed = (!upperSwOpen) && (!lowerSwOpen) && (!servoUpSwTriggered);
+
+    overrideActive = !allThreeClosed; // Show if they are not all closed
 
     bool powerKeyOn = elapsed60s && allThreeClosed;
     digitalWrite(POWER_KEY_PIN, powerKeyOn ? HIGH : LOW);
@@ -224,11 +228,11 @@ void loop() {
     // 5. Diagnostics reporting
     if (millis() - lastReport > 5000) {
         uint32_t secondsDown = (loweredTimestamp != 0) ? (millis() - loweredTimestamp) / 1000 : 0;
-        Serial.printf("[RX] Received LoRa: %u | UpperSw: %s | LowerSw: %s | ServoUpSw: %s | ServosActive (UP): %s | PowerKey (GPIO 15): %s (Down for %u s)\n",
+        Serial.printf("[RX] Received LoRa: %u | UpperSwTriggered: %s | LowerSwTriggered: %s | ServoUpSwTriggered: %s | ServosActive (UP): %s | PowerKey (GPIO 15): %s (Down for %u s)\n",
                       packetCount,
-                      upperSwOpen ? "OPEN (Triggered)" : "CLOSED (OK)",
-                      lowerSwOpen ? "OPEN (Triggered)" : "CLOSED (OK)",
-                      servoUpSwOpen ? "OPEN / HIGH (UP Command)" : "CLOSED / LOW (OK)",
+                      upperSwOpen ? "YES" : "NO",
+                      lowerSwOpen ? "YES" : "NO",
+                      servoUpSwTriggered ? "YES" : "NO",
                       servoActive ? "YES" : "NO",
                       powerKeyOn ? "ON (5V)" : "OFF (0V)",
                       secondsDown);

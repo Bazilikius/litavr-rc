@@ -12,6 +12,11 @@ struct RxConfig {
     uint16_t servoMin;         // 500-2500 us, default 1000
     uint16_t servoMax;         // 500-2500 us, default 2000
     uint32_t loraFreq;         // e.g. 433000000
+
+    // Switch active/trigger polarities: 0 = Active LOW (Closed), 1 = Active HIGH (Open)
+    uint8_t upperSwPolarity;   // default 1 (Open)
+    uint8_t lowerSwPolarity;   // default 1 (Open)
+    uint8_t servoUpSwPolarity; // default 1 (Open)
 };
 
 class ConfigManager {

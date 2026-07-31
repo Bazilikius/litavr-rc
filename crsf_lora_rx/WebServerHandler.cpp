@@ -1,7 +1,7 @@
 #include "WebServerHandler.h"
 
-WebServerHandler::WebServerHandler(ConfigManager &configManager, uint32_t &packetCount, uint16_t *channels, bool &upperSw, bool &lowerSw, bool &overrideActive)
-    : _configManager(configManager), _packetCount(packetCount), _channels(channels), _upperSw(upperSw), _lowerSw(lowerSw), _overrideActive(overrideActive), _server(80) {}
+WebServerHandler::WebServerHandler(ConfigManager &configManager, uint32_t &packetCount, uint16_t *channels, bool &upperSw, bool &lowerSw, bool &servoUpSw, bool &overrideActive)
+    : _configManager(configManager), _packetCount(packetCount), _channels(channels), _upperSw(upperSw), _lowerSw(lowerSw), _servoUpSw(servoUpSw), _overrideActive(overrideActive), _server(80) {}
 
 void WebServerHandler::begin() {
     // Start AP Mode
@@ -66,10 +66,12 @@ void WebServerHandler::_handleRoot() {
     html += "    } else {";
     html += "      link.innerText = 'NO DATA'; link.className = 'status-indicator';";
     html += "    }";
-    html += "    document.getElementById('upperSw').innerText = data.upperSw ? 'ВІДКРИТИЙ (Triggered)' : 'ЗАКРИТИЙ (OK)';";
+    html += "    document.getElementById('upperSw').innerText = data.upperSw ? 'АКТИВНИЙ / triggered' : 'CLOSED / OK';";
     html += "    document.getElementById('upperSw').className = data.upperSw ? 'status-indicator' : 'status-indicator status-ok';";
-    html += "    document.getElementById('lowerSw').innerText = data.lowerSw ? 'ВІДКРИТИЙ (Triggered)' : 'ЗАКРИТИЙ (OK)';";
+    html += "    document.getElementById('lowerSw').innerText = data.lowerSw ? 'АКТИВНИЙ / triggered' : 'CLOSED / OK';";
     html += "    document.getElementById('lowerSw').className = data.lowerSw ? 'status-indicator' : 'status-indicator status-ok';";
+    html += "    document.getElementById('servoUpSw').innerText = data.servoUpSw ? 'АКТИВНИЙ / triggered (Servos UP)' : 'CLOSED / OK';";
+    html += "    document.getElementById('servoUpSw').className = data.servoUpSw ? 'status-indicator' : 'status-indicator status-ok';";
     html += "    for(let i=0; i<16; i++) {";
     html += "      const cell = document.getElementById('ch' + i);";
     html += "      if(cell) cell.innerText = 'CH' + (i+1) + ': ' + data.channels[i];";
@@ -92,6 +94,7 @@ void WebServerHandler::_handleRoot() {
     html += "<p>Отримано пакетів: <span id='packetCount'>0</span></p>";
     html += "<p>Верхній кінцевик (GPIO 32): <span id='upperSw' class='status-indicator'>-</span></p>";
     html += "<p>Нижній кінцевик (GPIO 33): <span id='lowerSw' class='status-indicator'>-</span></p>";
+    html += "<p>Кінцевик Servo UP (GPIO 25): <span id='servoUpSw' class='status-indicator'>-</span></p>";
     html += "<strong>Значення каналів:</strong>";
     html += "<div class='grid'>";
     for (int i = 0; i < 16; i++) {
@@ -139,9 +142,39 @@ void WebServerHandler::_handleRoot() {
 
     html += "<hr>";
 
-    // 2. Global settings
-    html += "<h3>2. Системні налаштування</h3>";
-    html += "<p style='font-size: 14px; color: #666; margin-bottom: 15px;'>Кінцевий вимикач на GPIO 25 при натисканні (з'єднанні з GND) автоматично піднімає обидва сервоприводи вверх.</p>";
+    // 2. Limit Switch Polarity Settings
+    html += "<h3>2. Налаштування Кінцевих Вимикачів</h3>";
+    html += "<p style='font-size: 14px; color: #666; margin-bottom: 15px;'>Тут ви можете налаштувати активний рівень (відкритий чи закритий контакт при спрацюванні) для кожного з 3 кінцевиків:</p>";
+
+    html += "<label for='up_pol'>Верхній кінцевик (GPIO 32):</label>";
+    html += "<select name='up_pol' id='up_pol'>";
+    String upSel0 = (config.upperSwPolarity == 0) ? "selected" : "";
+    String upSel1 = (config.upperSwPolarity == 1) ? "selected" : "";
+    html += "<option value='0' " + upSel0 + ">Нормально закритий (LOW / Triggered when closed to GND)</option>";
+    html += "<option value='1' " + upSel1 + ">Нормально відкритий (HIGH / Triggered when open/disconnected)</option>";
+    html += "</select>";
+
+    html += "<label for='lo_pol'>Нижній кінцевик (GPIO 33):</label>";
+    html += "<select name='lo_pol' id='lo_pol'>";
+    String loSel0 = (config.lowerSwPolarity == 0) ? "selected" : "";
+    String loSel1 = (config.lowerSwPolarity == 1) ? "selected" : "";
+    html += "<option value='0' " + loSel0 + ">Нормально закритий (LOW / Triggered when closed to GND)</option>";
+    html += "<option value='1' " + loSel1 + ">Нормально відкритий (HIGH / Triggered when open/disconnected)</option>";
+    html += "</select>";
+
+    html += "<label for='sv_pol'>Кінцевик Servo UP (GPIO 25):</label>";
+    html += "<select name='sv_pol' id='sv_pol'>";
+    String svSel0 = (config.servoUpSwPolarity == 0) ? "selected" : "";
+    String svSel1 = (config.servoUpSwPolarity == 1) ? "selected" : "";
+    html += "<option value='0' " + svSel0 + ">Нормально закритий (LOW / Triggered when closed to GND)</option>";
+    html += "<option value='1' " + svSel1 + ">Нормально відкритий (HIGH / Triggered when open/disconnected)</option>";
+    html += "</select>";
+
+    html += "<hr>";
+
+    // 3. Global settings
+    html += "<h3>3. Системні налаштування</h3>";
+    html += "<p style='font-size: 14px; color: #666; margin-bottom: 15px;'>Для активації вихідного ключа живлення (GPIO 15) після 60 секунд затримки, усі три кінцевики мають перебувати в безпечному (Closed/OK) стані.</p>";
 
     html += "<label for='lora_freq'>Частота LoRa (Hz):</label>";
     html += "<input type='number' name='lora_freq' id='lora_freq' value='" + String(config.loraFreq) + "' min='100000000' max='1000000000'>";
@@ -158,7 +191,8 @@ void WebServerHandler::_handleRoot() {
 void WebServerHandler::_handleSave() {
     if (_server.hasArg("srv_chan") && _server.hasArg("srv_trig") &&
         _server.hasArg("srv_min") && _server.hasArg("srv_max") &&
-        _server.hasArg("lora_freq")) {
+        _server.hasArg("up_pol") && _server.hasArg("lo_pol") &&
+        _server.hasArg("sv_pol") && _server.hasArg("lora_freq")) {
 
         RxConfig newConfig;
         newConfig.servoChannel = _server.arg("srv_chan").toInt();
@@ -168,6 +202,10 @@ void WebServerHandler::_handleSave() {
         newConfig.servoMin = _server.arg("srv_min").toInt();
         newConfig.servoMax = _server.arg("srv_max").toInt();
         newConfig.loraFreq = _server.arg("lora_freq").toInt();
+
+        newConfig.upperSwPolarity = _server.arg("up_pol").toInt();
+        newConfig.lowerSwPolarity = _server.arg("lo_pol").toInt();
+        newConfig.servoUpSwPolarity = _server.arg("sv_pol").toInt();
 
         _configManager.saveConfig(newConfig);
 
@@ -200,6 +238,7 @@ void WebServerHandler::_handleStatus() {
     json += "\"packets\":" + String(_packetCount) + ",";
     json += "\"upperSw\":" + String(_upperSw ? 1 : 0) + ",";
     json += "\"lowerSw\":" + String(_lowerSw ? 1 : 0) + ",";
+    json += "\"servoUpSw\":" + String(_servoUpSw ? 1 : 0) + ",";
     json += "\"override\":" + String(_overrideActive ? 1 : 0) + ",";
     json += "\"channels\":[";
     for (int i = 0; i < 16; i++) {

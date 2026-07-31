@@ -8,6 +8,10 @@ ConfigManager::ConfigManager() {
     _currentConfig.servoMin = 1000;
     _currentConfig.servoMax = 2000;
     _currentConfig.loraFreq = 433000000;
+
+    _currentConfig.upperSwPolarity = 1;   // default Active HIGH (Open)
+    _currentConfig.lowerSwPolarity = 1;   // default Active HIGH (Open)
+    _currentConfig.servoUpSwPolarity = 1;  // default Active HIGH (Open)
 }
 
 void ConfigManager::begin() {
@@ -19,6 +23,10 @@ void ConfigManager::begin() {
     _currentConfig.servoMin = _prefs.getUShort("srv_min", 1000);
     _currentConfig.servoMax = _prefs.getUShort("srv_max", 2000);
     _currentConfig.loraFreq = _prefs.getUInt("lora_freq", 433000000);
+
+    _currentConfig.upperSwPolarity = _prefs.getUChar("up_pol", 1);
+    _currentConfig.lowerSwPolarity = _prefs.getUChar("lo_pol", 1);
+    _currentConfig.servoUpSwPolarity = _prefs.getUChar("sv_pol", 1);
 
     // Validate ranges
     if (_currentConfig.servoChannel < 1 || _currentConfig.servoChannel > 16) _currentConfig.servoChannel = 16;
@@ -46,9 +54,15 @@ void ConfigManager::saveConfig(RxConfig config) {
     _prefs.putUShort("srv_min", _currentConfig.servoMin);
     _prefs.putUShort("srv_max", _currentConfig.servoMax);
     _prefs.putUInt("lora_freq", _currentConfig.loraFreq);
+
+    _prefs.putUChar("up_pol", _currentConfig.upperSwPolarity);
+    _prefs.putUChar("lo_pol", _currentConfig.lowerSwPolarity);
+    _prefs.putUChar("sv_pol", _currentConfig.servoUpSwPolarity);
     _prefs.end();
 
-    Serial.printf("RX Config saved: Servo=Ch%d (Trig:%u, Min:%u, Max:%u, InvL:%d, InvR:%d) | LoraFreq:%u\n",
+    Serial.printf("RX Config saved: Servo=Ch%d (Trig:%u, Min:%u, Max:%u, InvL:%d, InvR:%d) | Polarities: Upper:%d, Lower:%d, ServoUp:%d | LoraFreq:%u\n",
                   _currentConfig.servoChannel, _currentConfig.servoTrigger, _currentConfig.servoMin, _currentConfig.servoMax,
-                  _currentConfig.servoInvertLeft, _currentConfig.servoInvertRight, _currentConfig.loraFreq);
+                  _currentConfig.servoInvertLeft, _currentConfig.servoInvertRight,
+                  _currentConfig.upperSwPolarity, _currentConfig.lowerSwPolarity, _currentConfig.servoUpSwPolarity,
+                  _currentConfig.loraFreq);
 }
