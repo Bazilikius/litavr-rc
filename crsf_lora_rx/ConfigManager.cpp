@@ -5,13 +5,15 @@ ConfigManager::ConfigManager() {
     _currentConfig.servoTrigger = 1500;
     _currentConfig.servoInvertLeft = 0;
     _currentConfig.servoInvertRight = 0;
-    _currentConfig.servoMin = 1500; // Default minimum set to 1500us
-    _currentConfig.servoMax = 2200; // Default maximum set to 2200us
+    _currentConfig.servoMin = 1500; // Default start point: 1500us
+    _currentConfig.servoMax = 2200; // Default end point: 2200us
     _currentConfig.loraFreq = 433000000;
 
-    _currentConfig.upperSwPolarity = 1;   // default Active HIGH (Open)
-    _currentConfig.lowerSwPolarity = 1;   // default Active HIGH (Open)
-    _currentConfig.servoUpSwPolarity = 1;  // default Active HIGH (Open)
+    // Set default switch polarities to Active LOW (0 = Closed / LOW when triggered)
+    // This matches standard limit switch wiring (pullup, connected to GND on press).
+    _currentConfig.upperSwPolarity = 0;
+    _currentConfig.lowerSwPolarity = 0;
+    _currentConfig.servoUpSwPolarity = 0;
 }
 
 void ConfigManager::begin() {
@@ -24,9 +26,9 @@ void ConfigManager::begin() {
     _currentConfig.servoMax = _prefs.getUShort("srv_max", 2200); // Default to 2200us
     _currentConfig.loraFreq = _prefs.getUInt("lora_freq", 433000000);
 
-    _currentConfig.upperSwPolarity = _prefs.getUChar("up_pol", 1);
-    _currentConfig.lowerSwPolarity = _prefs.getUChar("lo_pol", 1);
-    _currentConfig.servoUpSwPolarity = _prefs.getUChar("sv_pol", 1);
+    _currentConfig.upperSwPolarity = _prefs.getUChar("up_pol", 0); // Default to 0 (Active LOW)
+    _currentConfig.lowerSwPolarity = _prefs.getUChar("lo_pol", 0); // Default to 0 (Active LOW)
+    _currentConfig.servoUpSwPolarity = _prefs.getUChar("sv_pol", 0); // Default to 0 (Active LOW)
 
     // Validate ranges
     if (_currentConfig.servoChannel < 1 || _currentConfig.servoChannel > 16) _currentConfig.servoChannel = 16;

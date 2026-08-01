@@ -96,10 +96,14 @@ void setup() {
     Serial.println(" ESP32 CRSF LoRa RX OUTPUT CONTROLLER ");
     Serial.println("=============================================");
 
-    // Initialize Channels array with neutral value (1500us/ticks)
+    // Initialize Channels array with safe low/inactive value (1000us/ticks)
+    // This ensures they do not match the default 1500us trigger on boot, allowing the countdown timer to work properly!
     for (int i = 0; i < 16; i++) {
-        channels[i] = 1500;
+        channels[i] = 1000;
     }
+
+    // Start delay countdown timer immediately upon power-up
+    loweredTimestamp = millis();
 
     // Initialize Power Key Pin
     pinMode(POWER_KEY_PIN, OUTPUT);
