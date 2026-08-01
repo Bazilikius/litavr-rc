@@ -7,14 +7,15 @@
 // LEDC channels for Core 2.x
 #define LEFT_LEDC_CHAN 0
 #define RIGHT_LEDC_CHAN 1
+#define EXTRA_LEDC_CHAN 2
+#define POWER_LEDC_CHAN 3
 
-PwmController::PwmController(uint8_t leftServoPin, uint8_t rightServoPin, uint8_t mosfetPin, uint8_t extraPin, uint8_t ledPin, uint8_t upperSwPin, uint8_t lowerSwPin)
-    : _leftServoPin(leftServoPin), _rightServoPin(rightServoPin), _mosfetPin(mosfetPin), _extraPin(extraPin), _ledPin(ledPin), _upperSwPin(upperSwPin), _lowerSwPin(lowerSwPin),
+PwmController::PwmController(uint8_t leftServoPin, uint8_t rightServoPin, uint8_t mosfetPin, uint8_t extraPin, uint8_t ledPin, uint8_t upperSwPin, uint8_t lowerSwPin, uint8_t powerKeyPin)
+    : _leftServoPin(leftServoPin), _rightServoPin(rightServoPin), _mosfetPin(mosfetPin), _extraPin(extraPin), _ledPin(ledPin), _upperSwPin(upperSwPin), _lowerSwPin(lowerSwPin), _powerKeyPin(powerKeyPin),
       _currentLeftUs(0.0f), _currentRightUs(0.0f), _lastUpdateMs(0) {}
 
-void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uint16_t maxUs, bool isUpperTriggeredAtBoot) {
-    // Other digital outputs
-    pinMode(_extraPin, OUTPUT);
+void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uint16_t maxUs) {
+    // LED Pin
     pinMode(_ledPin, OUTPUT);
 
     // Initialize physical indicators: Red LED on GPIO 21, Blue LED on GPIO 22
@@ -30,11 +31,13 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     pinMode(_upperSwPin, INPUT_PULLUP);
     pinMode(_lowerSwPin, INPUT_PULLUP);
 
-    // Setup LEDC PWM on ESP32
+    // Setup LEDC PWM on ESP32 for all 4 channels (Left Servo, Right Servo, Extra Pin, Power Key)
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
     // Arduino ESP32 Core 3.x APIs
     ledcAttach(_leftServoPin, PWM_FREQ, PWM_RES);
     ledcAttach(_rightServoPin, PWM_FREQ, PWM_RES);
+    ledcAttach(_extraPin, PWM_FREQ, PWM_RES);
+    ledcAttach(_powerKeyPin, PWM_FREQ, PWM_RES);
 #else
     // Arduino ESP32 Core 2.x APIs
     ledcSetup(LEFT_LEDC_CHAN, PWM_FREQ, PWM_RES);
@@ -42,29 +45,26 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
 
     ledcSetup(RIGHT_LEDC_CHAN, PWM_FREQ, PWM_RES);
     ledcAttachPin(_rightServoPin, RIGHT_LEDC_CHAN);
+
+    ledcSetup(EXTRA_LEDC_CHAN, PWM_FREQ, PWM_RES);
+    ledcAttachPin(_extraPin, EXTRA_LEDC_CHAN);
+
+    ledcSetup(POWER_LEDC_CHAN, PWM_FREQ, PWM_RES);
+    ledcAttachPin(_powerKeyPin, POWER_LEDC_CHAN);
 #endif
 
-    Serial.printf("[PWM] Initialized LEDC on LeftServo=%d, RightServo=%d | MosfetSwitchPin=%d, Extra=%d, LED=%d, UpperSw=%d, LowerSw=%d\n",
-                  _leftServoPin, _rightServoPin, _mosfetPin, _extraPin, _ledPin, _upperSwPin, _lowerSwPin);
+    Serial.printf("[PWM] Initialized LEDC on LeftServo=%d, RightServo=%d, Extra=%d, PowerKey=%d | MosfetSwitchPin=%d, LED=%d, UpperSw=%d, LowerSw=%d\n",
+                  _leftServoPin, _rightServoPin, _extraPin, _powerKeyPin, _mosfetPin, _ledPin, _upperSwPin, _lowerSwPin);
 
-    // Set starting positions organically based on the Upper Limit Switch state at boot!
-    // This prevents any unnecessary travel, jumps, or jerks on startup!
-    if (isUpperTriggeredAtBoot) {
-        Serial.println("[PWM] Upper Limit Switch triggered at boot. Initializing servos in active/UP position.");
-        _currentLeftUs = (float)(invertLeft ? minUs : maxUs);
-        _currentRightUs = (float)(invertRight ? minUs : maxUs);
-    } else {
-        Serial.println("[PWM] Upper Limit Switch not triggered. Initializing servos in inactive/DOWN position.");
-        _currentLeftUs = (float)(invertLeft ? maxUs : minUs);
-        _currentRightUs = (float)(invertRight ? maxUs : minUs);
-    }
-
+    // Startup positions: initialize both servos to their inactive/DOWN targets
+    _currentLeftUs = (float)(invertLeft ? maxUs : minUs);
+    _currentRightUs = (float)(invertRight ? maxUs : minUs);
     _lastUpdateMs = millis();
 
-    // Startup test sweep (Neutral Start -> Active -> Neutral Start) using smooth update loops
+    // Startup test sequence: sweep servos slowly and synchronously to verify hardware (1500us -> 2200us -> 1500us)
     Serial.println("[PWM] Running synchronized boot-up diagnostics sweep (1500us -> 2200us -> 1500us)...");
 
-    // Step 1: Sweep slowly UP from 1500us to 2200us
+    // Step 1: Sweep UP from 1500us to 2200us
     Serial.println("[PWM] Sweeping UP (1500 -> 2200)...");
     while (true) {
         updateServos(true, 1500, 2200, invertLeft, invertRight);
@@ -76,7 +76,7 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
         delay(15);
     }
 
-    // Step 2: Sweep slowly DOWN from 2200us to 1500us
+    // Step 2: Sweep DOWN from 2200us to 1500us
     Serial.println("[PWM] Sweeping DOWN (2200 -> 1500)...");
     while (true) {
         updateServos(false, 1500, 2200, invertLeft, invertRight);
@@ -89,10 +89,8 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     }
 
     // Toggle Extra & LED
-    digitalWrite(_extraPin, HIGH);
     digitalWrite(_ledPin, HIGH);
     delay(300);
-    digitalWrite(_extraPin, LOW);
     digitalWrite(_ledPin, LOW);
 
     // Initial state: stationary (Blue ON, Red OFF)
@@ -174,18 +172,17 @@ void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, 
     writeMicros(_rightServoPin, (uint32_t)_currentRightUs);
 }
 
-void PwmController::updateOutputs(bool isActive, uint8_t offLevel) {
-    uint8_t outputState;
+void PwmController::updatePwmOutputs(bool isExtraActive, bool isPowerKeyActive, uint8_t extraOffLevel, uint8_t powerKeyOffLevel) {
+    // Generate precise 50Hz PWM signals for the RC switches on GPIO 26 and GPIO 15
+    // Default Active: 2000us, Inactive: 1000us
 
-    if (isActive) {
-        // ON state is the opposite of offLevel
-        outputState = (offLevel == 0) ? HIGH : LOW;
-    } else {
-        // OFF state is offLevel
-        outputState = (offLevel == 0) ? LOW : HIGH;
-    }
+    // GPIO 26 Extra Pin (RC Switch)
+    uint32_t extraUs = isExtraActive ? (!extraOffLevel ? 2000 : 1000) : (extraOffLevel ? 2000 : 1000);
+    writeMicros(_extraPin, extraUs);
 
-    digitalWrite(_extraPin, outputState);
+    // GPIO 15 Power Key Pin (RC Switch)
+    uint32_t powerKeyUs = isPowerKeyActive ? (!powerKeyOffLevel ? 2000 : 1000) : (powerKeyOffLevel ? 2000 : 1000);
+    writeMicros(_powerKeyPin, powerKeyUs);
 }
 
 void PwmController::writeMicros(uint8_t pin, uint32_t us) {
@@ -198,7 +195,11 @@ void PwmController::writeMicros(uint8_t pin, uint32_t us) {
     ledcWrite(pin, duty);
 #else
     // Arduino ESP32 Core 2.x
-    uint8_t chan = (pin == _leftServoPin) ? LEFT_LEDC_CHAN : RIGHT_LEDC_CHAN;
+    uint8_t chan;
+    if (pin == _leftServoPin) chan = LEFT_LEDC_CHAN;
+    else if (pin == _rightServoPin) chan = RIGHT_LEDC_CHAN;
+    else if (pin == _extraPin) chan = EXTRA_LEDC_CHAN;
+    else chan = POWER_LEDC_CHAN;
     ledcWrite(chan, duty);
 #endif
 }

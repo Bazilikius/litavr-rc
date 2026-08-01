@@ -2,8 +2,8 @@
  * CRSF LoRa Receiver & Outputs Controller for ESP32 (Dev Module)
  * - Receives channel broadcast from Transmitter via SX127x LoRa Module.
  * - Controls 2 synchronous servos (Left on GPIO 4, Right on GPIO 13) with Left and Right software inversions.
- * - Controls Extra Pin on GPIO 26 (replicates the active/trigger level of the servos) with configurable polarity.
- * - Controls Power Key Pin on GPIO 15 (outputs 0V/5V) with configurable polarity and 60-second delay logic.
+ * - Controls Extra Pin on GPIO 26 (replicates active level of servos via 50Hz PWM for RC switches).
+ * - Controls Power Key Pin on GPIO 15 (replicates delay logic level via 50Hz PWM for RC switches).
  * - Monitors 3 Limit Switches:
  *   1. Upper (GPIO 32) using INPUT_PULLUP.
  *   2. Lower (GPIO 33) using INPUT_PULLUP.
@@ -11,7 +11,7 @@
  * - LED (GPIO 27) lights up when Upper Limit Switch is open/triggered.
  * - All three switches have configurable active trigger polarities (Normally Open / Normally Closed).
  * - If Servo UP Switch (GPIO 25) state matches its configured trigger polarity, servos are driven UP (active).
- * - Power Key Pin (GPIO 15) is set HIGH only if:
+ * - Power Key Pin (GPIO 15) is set active only if:
  *   a) 60 seconds have elapsed since the CRSF channel commanded the servos to go DOWN.
  *   b) AND simultaneously: ALL THREE limit switches are in their non-triggered (Closed / Safe / OK) states.
  * - Hosts a local Web Configurator Access Point (AP SSID: "CRSF-Config-RX") with WiFi TX power reduced to 25%.
@@ -28,11 +28,11 @@
 #define LEFT_SERVO_PIN  4
 #define RIGHT_SERVO_PIN 13
 #define MOSFET_PIN      25 // Re-purposed as a limit switch input to move servos UP
-#define EXTRA_PIN       26
+#define EXTRA_PIN       26 // 50Hz RC Switch PWM Output
 #define LED_PIN         27
 #define UPPER_SW_PIN    32
 #define LOWER_SW_PIN    33
-#define POWER_KEY_PIN   15 // Pin to control the 0V/+5V key
+#define POWER_KEY_PIN   15 // 50Hz RC Switch PWM Output
 
 // LoRa SPI Pin Configuration
 #define LORA_SS    5
@@ -43,7 +43,7 @@
 #define LORA_MOSI  23
 
 ConfigManager configManager;
-PwmController controller(LEFT_SERVO_PIN, RIGHT_SERVO_PIN, MOSFET_PIN, EXTRA_PIN, LED_PIN, UPPER_SW_PIN, LOWER_SW_PIN);
+PwmController controller(LEFT_SERVO_PIN, RIGHT_SERVO_PIN, MOSFET_PIN, EXTRA_PIN, LED_PIN, UPPER_SW_PIN, LOWER_SW_PIN, POWER_KEY_PIN);
 LoraModule lora(LORA_SS, LORA_RST, LORA_DIO0);
 
 // Global shared variables
@@ -109,11 +109,6 @@ void setup() {
     configManager.begin();
     RxConfig activeConfig = configManager.getConfig();
 
-    // Initialize Power Key Pin with configured default inactive level
-    pinMode(POWER_KEY_PIN, OUTPUT);
-    digitalWrite(POWER_KEY_PIN, activeConfig.powerKeyOffLevel);
-    Serial.printf("Power Key initialized on GPIO %d (set to default inactive: %d).\n", POWER_KEY_PIN, activeConfig.powerKeyOffLevel);
-
     // Start Web Server
     webServer.begin();
 
@@ -129,7 +124,7 @@ void setup() {
     // Evaluate Upper Limit Switch state at boot using the loaded polarity settings to initialize position organically!
     bool isUpperTriggeredAtBoot = (digitalRead(UPPER_SW_PIN) == (activeConfig.upperSwPolarity != 0));
 
-    // Initialize Outputs with correct left/right inversions and run synchronized, slow self-test sweep
+    // Initialize Outputs (Servos and RC switch PWMs) with correct left/right inversions and run synchronized, slow self-test sweep
     controller.begin(activeConfig.servoInvertLeft != 0, activeConfig.servoInvertRight != 0, activeConfig.servoMin, activeConfig.servoMax, isUpperTriggeredAtBoot);
 }
 
@@ -212,10 +207,6 @@ void loop() {
         servoActive = true;
     }
 
-    // Replicate active servo state to Extra Pin (GPIO 26): set to active state if active, otherwise inactive state
-    uint8_t extraPinState = servoActive ? (!activeConfig.extraPinOffLevel) : (activeConfig.extraPinOffLevel);
-    digitalWrite(EXTRA_PIN, extraPinState ? HIGH : LOW);
-
     // 60-second delay logic for Power Key (GPIO 15):
     // Activates 60 seconds after the CRSF channel commands servos to go DOWN,
     // AND simultaneously: ALL THREE limit switches are in their non-triggered / safe / closed (OK) state.
@@ -226,9 +217,8 @@ void loop() {
 
     bool powerKeyOn = elapsed60s && allThreeClosed;
 
-    // Apply power key active/inactive polarity level (0 = LOW is inactive, 1 = HIGH is inactive)
-    uint8_t powerKeyPinState = powerKeyOn ? (!activeConfig.powerKeyOffLevel) : (activeConfig.powerKeyOffLevel);
-    digitalWrite(POWER_KEY_PIN, powerKeyPinState ? HIGH : LOW);
+    // Update PWM signals for GPIO 26 and GPIO 15 (outputs 1000us - 2000us 50Hz pulses for RC Switches)
+    controller.updatePwmOutputs(servoActive, powerKeyOn, activeConfig.extraPinOffLevel, activeConfig.powerKeyOffLevel);
 
     // Update Servos based on active state
     controller.updateServos(servoActive, activeConfig.servoMin, activeConfig.servoMax, activeConfig.servoInvertLeft != 0, activeConfig.servoInvertRight != 0);
@@ -245,7 +235,7 @@ void loop() {
                       lowerSwOpen ? "YES" : "NO",
                       servoUpSwTriggered ? "YES" : "NO",
                       servoActive ? "YES" : "NO",
-                      powerKeyPinState ? "ACTIVE" : "INACTIVE",
+                      powerKeyOn ? "ACTIVE" : "INACTIVE",
                       secondsDown);
         lastReport = millis();
     }
