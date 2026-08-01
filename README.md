@@ -56,12 +56,12 @@ This project splits the original passive receiver into a high-performance **CRSF
 | --- | --- | --- | --- |
 | **Left Servo PWM** | GPIO 4 | Output | Main left servo output (50Hz PWM) |
 | **Right Servo PWM** | GPIO 13 | Output | Synchronous right servo output (Inversion supported) |
-| **Extra Output Pin** | GPIO 26 | Output | Replicates the active state of the servos (HIGH = active/UP, LOW = inactive/DOWN) |
-| **Power Key Output** | GPIO 15 | Output | Outputs 5V to drive an external power switch (60-second delay logic) |
-| **Status LED** | GPIO 27 | Output | Lights up when Upper limit switch is open (reads HIGH) |
-| **Upper Limit Switch** | GPIO 32 | Input | Configured with `INPUT_PULLUP` (Open/Triggered reads HIGH) |
-| **Lower Limit Switch** | GPIO 33 | Input | Configured with `INPUT_PULLUP` (Open/Triggered reads HIGH) |
-| **Servo UP Limit Switch** | GPIO 25 | Input | Configured with `INPUT_PULLUP` (Open/Triggered reads HIGH) |
+| **Extra Output Pin** | GPIO 26 | Output | Replicates active level of servos via 50Hz PWM for RC switches (HIGH = 2000us, LOW = 1000us) |
+| **Power Key Output** | GPIO 15 | Output | Replicates delay logic level via 50Hz PWM for RC switches (HIGH = 2000us, LOW = 1000us) |
+| **Status LED** | GPIO 27 | Output | Lights up when Upper limit switch is open/triggered |
+| **Upper Limit Switch** | GPIO 32 | Input | Configured with `INPUT_PULLUP` |
+| **Lower Limit Switch** | GPIO 33 | Input | Configured with `INPUT_PULLUP` |
+| **Servo UP Limit Switch** | GPIO 25 | Input | Configured with `INPUT_PULLUP` |
 | **LoRa SS/CS** | GPIO 5 | Output | SPI Slave Select for RFM95/RFM98W/SX1278 |
 | **LoRa RST** | GPIO 14 | Output | Reset pin |
 | **LoRa DIO0** | GPIO 2 | Input | Interrupt pin |
@@ -138,14 +138,21 @@ If your ESP32 board reboots (resets) when both limit switches are triggered simu
 
 If you encounter flashing errors such as:
 `Warning: Failed to communicate with the flash chip, read/write operations will fail.`
+`A fatal error occurred: Failed to connect to ESP32: No serial data received.`
 `A fatal error occurred: Serial data stream stopped: Possible serial noise or corruption.`
 
-This is usually caused by **GPIO 12 (MTDI)** being pulled HIGH at boot. GPIO 12 is an ESP32 strapping pin that sets the SPI flash voltage. If pulled HIGH, the flash is run at 1.8V instead of 3.3V, causing complete SPI communication failure.
+This can be caused by two primary hardware factors:
+1. **GPIO 12 (MTDI)** being pulled HIGH at boot, causing flash voltage conflicts. (Relocated to GPIO 4 in software to resolve).
+2. **ESPTool failing to put the ESP32 into bootloader mode automatically** over the USB-to-UART bridge.
 
-### Software Resolution (Already Done)
-We have relocated the **Left Servo PWM Output** to **GPIO 4**, which is a safe, non-strapping pin.
+### Ultimate Flashing / Upload Recovery Checklist
+If the console stays stuck on `Connecting....................` and ends with `No serial data received`, follow these steps to manually force the ESP32 into download mode:
 
-### Hardware Best Practices
-* **Disconnect Peripheral Connections**: Always disconnect your servos or high-load devices from the ESP32 pins (especially GPIO 4 / GPIO 13 / GPIO 12) before uploading firmware, as connected components can inject serial noise or draw too much current from the USB bus during flashing.
-* **Lower the Upload Speed**: In the Arduino IDE, set `Upload Speed` to **`115200`** instead of `921600` to prevent data stream corruption.
-* **Bootloader Entry**: If the board fails to connect, hold down the physical **BOOT/IO0 button** on your ESP32 module, click Upload, and only release it once you see the `Connecting...` message in the console.
+1. **Unplug high-draw peripherals**: Temporarily unplug or disconnect your servos, receivers, or power keys from the ESP32 GPIO pins, as they can inject serial noise or draw too much current from the USB bus during flashing.
+2. **Force Manual Bootloader Entry**:
+   * Press and **HOLD** the physical **BOOT (or IO0) button** on your ESP32 board.
+   * While holding the BOOT button, press and release the **EN (or RST) button** once.
+   * Alternatively, just **HOLD** the **BOOT button** down while clicking **Upload** in the Arduino IDE.
+   * Once you see the compiler finish and `Connecting...` appear, you can release the BOOT button. It will now connect and write to the flash chip flawlessly!
+3. **Use a High-Quality USB Data Cable**: Ensure you are using a certified USB cable capable of data transfer, and try plugging it directly into a motherboard port (avoiding external unpowered hubs).
+4. **Select 115200 Baud Rate**: If the upload gets corrupted or fails midway, change the `Upload Speed` in the `Tools` menu of Arduino IDE from `921600` to **`115200`** for maximum noise resistance.
