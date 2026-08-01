@@ -52,7 +52,7 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     _rightVel = 0.0f;
     _lastUpdateMs = millis();
 
-    // Step 1: Sweep slowly UP from 1500us to 2200us using the organic PD motion profile
+    // Step 1: Sweep UP from 1500us to 2200us using the organic PD motion profile
     Serial.println("[PWM] Sweeping UP (1500 -> 2200)...");
     while (true) {
         updateServos(true, 1500, 2200, invertLeft, invertRight);
@@ -65,7 +65,7 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
         delay(15); // Smooth step delay
     }
 
-    // Step 2: Sweep slowly DOWN from 2200us to 1500us using the organic PD motion profile
+    // Step 2: Sweep DOWN from 2200us to 1500us using the organic PD motion profile
     Serial.println("[PWM] Sweeping DOWN (2200 -> 1500)...");
     while (true) {
         updateServos(false, 1500, 2200, invertLeft, invertRight);
@@ -136,9 +136,9 @@ void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, 
         float leftAccel = (leftError * Kp) - (Kd * _leftVel);
         _leftVel += leftAccel * elapsed;
 
-        // Speed cap for slow, majestic movements (250us range over exactly 60 seconds)
-        // Rate: 250.0f / 60000.0f = 1.0f / 240.0f = 0.004166667f microseconds per millisecond.
-        float maxVel = 0.004166667f;
+        // Speed limit step: 1.0f / 10.0f = 0.1us per millisecond.
+        // Full travel range of 700us takes exactly 7.0 seconds.
+        float maxVel = 0.100000000f;
         if (_leftVel > maxVel) _leftVel = maxVel;
         if (_leftVel < -maxVel) _leftVel = -maxVel;
 
