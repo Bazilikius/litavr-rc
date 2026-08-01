@@ -14,7 +14,7 @@ PwmController::PwmController(uint8_t leftServoPin, uint8_t rightServoPin, uint8_
     : _leftServoPin(leftServoPin), _rightServoPin(rightServoPin), _mosfetPin(mosfetPin), _extraPin(extraPin), _ledPin(ledPin), _upperSwPin(upperSwPin), _lowerSwPin(lowerSwPin), _powerKeyPin(powerKeyPin),
       _currentLeftUs(0.0f), _currentRightUs(0.0f), _lastUpdateMs(0) {}
 
-void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uint16_t maxUs) {
+void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uint16_t maxUs, bool isUpperTriggeredAtBoot) {
     // LED Pin
     pinMode(_ledPin, OUTPUT);
 
@@ -56,9 +56,18 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     Serial.printf("[PWM] Initialized LEDC on LeftServo=%d, RightServo=%d, Extra=%d, PowerKey=%d | MosfetSwitchPin=%d, LED=%d, UpperSw=%d, LowerSw=%d\n",
                   _leftServoPin, _rightServoPin, _extraPin, _powerKeyPin, _mosfetPin, _ledPin, _upperSwPin, _lowerSwPin);
 
-    // Startup positions: initialize both servos to their inactive/DOWN targets
-    _currentLeftUs = (float)(invertLeft ? maxUs : minUs);
-    _currentRightUs = (float)(invertRight ? maxUs : minUs);
+    // Set starting positions organically based on the Upper Limit Switch state at boot!
+    // This prevents any unnecessary travel, jumps, or jerks on startup!
+    if (isUpperTriggeredAtBoot) {
+        Serial.println("[PWM] Upper Limit Switch triggered at boot. Initializing servos in active/UP position.");
+        _currentLeftUs = (float)(invertLeft ? minUs : maxUs);
+        _currentRightUs = (float)(invertRight ? minUs : maxUs);
+    } else {
+        Serial.println("[PWM] Upper Limit Switch not triggered. Initializing servos in inactive/DOWN position.");
+        _currentLeftUs = (float)(invertLeft ? maxUs : minUs);
+        _currentRightUs = (float)(invertRight ? maxUs : minUs);
+    }
+
     _lastUpdateMs = millis();
 
     // Startup test sequence: sweep servos slowly and synchronously to verify hardware (1500us -> 2200us -> 1500us)
