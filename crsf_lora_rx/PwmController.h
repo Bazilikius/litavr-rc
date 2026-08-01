@@ -38,6 +38,11 @@ private:
     // Smooth servo speed-limiting state variables (using floats for high precision sub-microsecond rate-limiting)
     float _currentLeftUs;
     float _currentRightUs;
+
+    // Velocity tracking for acceleration/jerk limiting (smooth S-curve transitions)
+    float _leftVel;
+    float _rightVel;
+
     uint32_t _lastUpdateMs;
 };
 

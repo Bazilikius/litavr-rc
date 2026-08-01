@@ -10,7 +10,7 @@
 
 PwmController::PwmController(uint8_t leftServoPin, uint8_t rightServoPin, uint8_t mosfetPin, uint8_t extraPin, uint8_t ledPin, uint8_t upperSwPin, uint8_t lowerSwPin)
     : _leftServoPin(leftServoPin), _rightServoPin(rightServoPin), _mosfetPin(mosfetPin), _extraPin(extraPin), _ledPin(ledPin), _upperSwPin(upperSwPin), _lowerSwPin(lowerSwPin),
-      _currentLeftUs(0.0f), _currentRightUs(0.0f), _lastUpdateMs(0) {}
+      _currentLeftUs(0.0f), _currentRightUs(0.0f), _leftVel(0.0f), _rightVel(0.0f), _lastUpdateMs(0) {}
 
 void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uint16_t maxUs) {
     // Other digital outputs
@@ -41,38 +41,40 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     Serial.printf("[PWM] Initialized LEDC on LeftServo=%d, RightServo=%d | MosfetSwitchPin=%d, Extra=%d, LED=%d, UpperSw=%d, LowerSw=%d\n",
                   _leftServoPin, _rightServoPin, _mosfetPin, _extraPin, _ledPin, _upperSwPin, _lowerSwPin);
 
-    // Startup test sequence: sweep servos slowly and synchronously to verify hardware (1000us -> 1300us -> 1000us)
-    Serial.println("[PWM] Running synchronized boot-up diagnostics sweep (1000us -> 1300us -> 1000us)...");
+    // Startup test sequence: sweep servos slowly and organically to verify hardware (500us -> 2500us -> 500us)
+    Serial.println("[PWM] Running synchronized boot-up diagnostics sweep (500us -> 2500us -> 500us)...");
 
     // Initialize starting positions
-    _currentLeftUs = 1000.0f;
-    _currentRightUs = 1000.0f;
+    _currentLeftUs = 500.0f;
+    _currentRightUs = 500.0f;
+    _leftVel = 0.0f;
+    _rightVel = 0.0f;
     _lastUpdateMs = millis();
 
-    // Step 1: Sweep slowly UP from 1000us to 1300us
-    Serial.println("[PWM] Sweeping UP (1000 -> 1300)...");
+    // Step 1: Sweep slowly UP from 500us to 2500us using the organic PD motion profile
+    Serial.println("[PWM] Sweeping UP (500 -> 2500)...");
     while (true) {
-        updateServos(true, 1000, 1300, invertLeft, invertRight);
+        updateServos(true, 500, 2500, invertLeft, invertRight);
 
-        // Break once we've reached the target of 1300us
-        float leftTarget = invertLeft ? 1000.0f : 1300.0f;
-        if (abs(_currentLeftUs - leftTarget) < 0.1f) {
+        // Break once we are extremely close to the target of 2500us
+        float leftTarget = invertLeft ? 500.0f : 2500.0f;
+        if (abs(_currentLeftUs - leftTarget) < 1.0f) {
             break;
         }
-        delay(15); // Short non-blocking-like delay to step smoothly
+        delay(15); // Smooth step delay
     }
 
-    // Step 2: Sweep slowly DOWN from 1300us to 1000us
-    Serial.println("[PWM] Sweeping DOWN (1300 -> 1000)...");
+    // Step 2: Sweep slowly DOWN from 2500us to 500us using the organic PD motion profile
+    Serial.println("[PWM] Sweeping DOWN (2500 -> 500)...");
     while (true) {
-        updateServos(false, 1000, 1300, invertLeft, invertRight);
+        updateServos(false, 500, 2500, invertLeft, invertRight);
 
-        // Break once we've reached the target of 1000us
-        float leftTarget = invertLeft ? 1300.0f : 1000.0f;
-        if (abs(_currentLeftUs - leftTarget) < 0.1f) {
+        // Break once we are extremely close to the target of 500us
+        float leftTarget = invertLeft ? 2500.0f : 500.0f;
+        if (abs(_currentLeftUs - leftTarget) < 1.0f) {
             break;
         }
-        delay(15); // Short non-blocking-like delay to step smoothly
+        delay(15); // Smooth step delay
     }
 
     // Toggle Extra & LED
@@ -111,6 +113,8 @@ void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, 
     if (_currentLeftUs == 0.0f || _currentRightUs == 0.0f) {
         _currentLeftUs = leftTarget;
         _currentRightUs = rightTarget;
+        _leftVel = 0.0f;
+        _rightVel = 0.0f;
         _lastUpdateMs = millis();
     }
 
@@ -120,27 +124,33 @@ void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, 
     if (elapsed > 0) {
         _lastUpdateMs = now;
 
-        // Controlled speed step: 200us change per 90,000ms (200us range over exactly 90 seconds)
-        // Rate: 200.0f / 90000.0f = 1.0f / 450.0f = 0.002222222f microseconds per millisecond.
-        float maxStep = (float)elapsed * (1.0f / 450.0f);
+        // --- Industrial-Grade Proportional-Derivative (PD) Trajectory Profile ---
+        // Acceleration = (Spring Pull towards Target) - (Damping friction based on Velocity)
+        // This naturally limits acceleration and jerk, creating beautiful smooth S-curve starts and stops.
+        float Kp = 0.000004f; // Spring stiffness (lower = slower acceleration & softer starts)
+        float Kd = 0.035f;    // Friction damping (prevents oscillation and ensures smooth deceleration)
 
-        // Smoothly adjust Left Servo
-        if (_currentLeftUs < leftTarget) {
-            _currentLeftUs += maxStep;
-            if (_currentLeftUs > leftTarget) _currentLeftUs = leftTarget;
-        } else if (_currentLeftUs > leftTarget) {
-            _currentLeftUs -= maxStep;
-            if (_currentLeftUs < leftTarget) _currentLeftUs = leftTarget;
-        }
+        // Left Servo PD update
+        float leftError = leftTarget - _currentLeftUs;
+        float leftAccel = (leftError * Kp) - (Kd * _leftVel);
+        _leftVel += leftAccel * elapsed;
 
-        // Smoothly adjust Right Servo
-        if (_currentRightUs < rightTarget) {
-            _currentRightUs += maxStep;
-            if (_currentRightUs > rightTarget) _currentRightUs = rightTarget;
-        } else if (_currentRightUs > rightTarget) {
-            _currentRightUs -= maxStep;
-            if (_currentRightUs < rightTarget) _currentRightUs = rightTarget;
-        }
+        // Speed cap for slow, majestic movements (~500us to 2500us over 60-90 seconds)
+        float maxVel = 0.025f;
+        if (_leftVel > maxVel) _leftVel = maxVel;
+        if (_leftVel < -maxVel) _leftVel = -maxVel;
+
+        _currentLeftUs += _leftVel * elapsed;
+
+        // Right Servo PD update
+        float rightError = rightTarget - _currentRightUs;
+        float rightAccel = (rightError * Kp) - (Kd * _rightVel);
+        _rightVel += rightAccel * elapsed;
+
+        if (_rightVel > maxVel) _rightVel = maxVel;
+        if (_rightVel < -maxVel) _rightVel = -maxVel;
+
+        _currentRightUs += _rightVel * elapsed;
     }
 
     writeMicros(_leftServoPin, (uint32_t)_currentLeftUs);
