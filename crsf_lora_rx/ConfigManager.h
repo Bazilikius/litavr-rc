@@ -17,6 +17,10 @@ struct RxConfig {
     uint8_t upperSwPolarity;   // default 1 (Open)
     uint8_t lowerSwPolarity;   // default 1 (Open)
     uint8_t servoUpSwPolarity; // default 1 (Open)
+
+    // Output MOSFET polarities: 0 = Active HIGH / Inactive LOW, 1 = Active LOW / Inactive HIGH
+    uint8_t powerKeyOffLevel;  // default 0 (LOW = Inactive / OFF)
+    uint8_t extraPinOffLevel;  // default 0 (LOW = Inactive / OFF)
 };
 
 class ConfigManager {

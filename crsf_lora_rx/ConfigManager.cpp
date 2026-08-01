@@ -10,10 +10,12 @@ ConfigManager::ConfigManager() {
     _currentConfig.loraFreq = 433000000;
 
     // Set default switch polarities to Active LOW (0 = Closed / LOW when triggered)
-    // This matches standard limit switch wiring (pullup, connected to GND on press).
     _currentConfig.upperSwPolarity = 0;
     _currentConfig.lowerSwPolarity = 0;
     _currentConfig.servoUpSwPolarity = 0;
+
+    _currentConfig.powerKeyOffLevel = 0; // Default: Active HIGH / Inactive LOW (0V)
+    _currentConfig.extraPinOffLevel = 0; // Default: Active HIGH / Inactive LOW (0V)
 }
 
 void ConfigManager::begin() {
@@ -29,6 +31,9 @@ void ConfigManager::begin() {
     _currentConfig.upperSwPolarity = _prefs.getUChar("up_pol", 0); // Default to 0 (Active LOW)
     _currentConfig.lowerSwPolarity = _prefs.getUChar("lo_pol", 0); // Default to 0 (Active LOW)
     _currentConfig.servoUpSwPolarity = _prefs.getUChar("sv_pol", 0); // Default to 0 (Active LOW)
+
+    _currentConfig.powerKeyOffLevel = _prefs.getUChar("p_key_off", 0);
+    _currentConfig.extraPinOffLevel = _prefs.getUChar("ex_pin_off", 0);
 
     // Validate ranges
     if (_currentConfig.servoChannel < 1 || _currentConfig.servoChannel > 16) _currentConfig.servoChannel = 16;
@@ -60,11 +65,15 @@ void ConfigManager::saveConfig(RxConfig config) {
     _prefs.putUChar("up_pol", _currentConfig.upperSwPolarity);
     _prefs.putUChar("lo_pol", _currentConfig.lowerSwPolarity);
     _prefs.putUChar("sv_pol", _currentConfig.servoUpSwPolarity);
+
+    _prefs.putUChar("p_key_off", _currentConfig.powerKeyOffLevel);
+    _prefs.putUChar("ex_pin_off", _currentConfig.extraPinOffLevel);
     _prefs.end();
 
-    Serial.printf("RX Config saved: Servo=Ch%d (Trig:%u, Min:%u, Max:%u, InvL:%d, InvR:%d) | Polarities: Upper:%d, Lower:%d, ServoUp:%d | LoraFreq:%u\n",
+    Serial.printf("RX Config saved: Servo=Ch%d (Trig:%u, Min:%u, Max:%u, InvL:%d, InvR:%d) | Polarities: Upper:%d, Lower:%d, ServoUp:%d | Outputs: PowerKeyOff:%d, ExtraOff:%d | LoraFreq:%u\n",
                   _currentConfig.servoChannel, _currentConfig.servoTrigger, _currentConfig.servoMin, _currentConfig.servoMax,
                   _currentConfig.servoInvertLeft, _currentConfig.servoInvertRight,
                   _currentConfig.upperSwPolarity, _currentConfig.lowerSwPolarity, _currentConfig.servoUpSwPolarity,
+                  _currentConfig.powerKeyOffLevel, _currentConfig.extraPinOffLevel,
                   _currentConfig.loraFreq);
 }

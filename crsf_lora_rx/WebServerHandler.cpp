@@ -174,8 +174,30 @@ void WebServerHandler::_handleRoot() {
 
     html += "<hr>";
 
-    // 3. Global settings
-    html += "<h3>3. Системні налаштування</h3>";
+    // 3. Output polarities
+    html += "<h3>3. Налаштування Полярності Виходів (MOSFET / Ключів)</h3>";
+    html += "<p style='font-size: 14px; color: #666; margin-bottom: 15px;'>Вкажіть полярність вихідних сигналів для узгодження з вашим залізом (MOSFET / реле):</p>";
+
+    html += "<label for='p_key_off'>Ключ Живлення (GPIO 15) рівень вимкнення:</label>";
+    html += "<select name='p_key_off' id='p_key_off'>";
+    String pKeyOff0 = (config.powerKeyOffLevel == 0) ? "selected" : "";
+    String pKeyOff1 = (config.powerKeyOffLevel == 1) ? "selected" : "";
+    html += "<option value='0' " + pKeyOff0 + ">LOW (Вимкнено = 0V, Активовано = 3.3V)</option>";
+    html += "<option value='1' " + pKeyOff1 + ">HIGH (Вимкнено = 3.3V, Активовано = 0V)</option>";
+    html += "</select>";
+
+    html += "<label for='ex_pin_off'>Extra Pin (GPIO 26) рівень вимкнення:</label>";
+    html += "<select name='ex_pin_off' id='ex_pin_off'>";
+    String exPinOff0 = (config.extraPinOffLevel == 0) ? "selected" : "";
+    String exPinOff1 = (config.extraPinOffLevel == 1) ? "selected" : "";
+    html += "<option value='0' " + exPinOff0 + ">LOW (Вимкнено = 0V, Активовано = 3.3V)</option>";
+    html += "<option value='1' " + exPinOff1 + ">HIGH (Вимкнено = 3.3V, Активовано = 0V)</option>";
+    html += "</select>";
+
+    html += "<hr>";
+
+    // 4. Global settings
+    html += "<h3>4. Системні налаштування</h3>";
     html += "<p style='font-size: 14px; color: #666; margin-bottom: 15px;'>Для активації вихідного ключа живлення (GPIO 15) після 60 секунд затримки, усі три кінцевики мають перебувати в безпечному (Closed/OK) стані.</p>";
 
     html += "<label for='lora_freq'>Частота LoRa (Hz):</label>";
@@ -194,7 +216,8 @@ void WebServerHandler::_handleSave() {
     if (_server.hasArg("srv_chan") && _server.hasArg("srv_trig") &&
         _server.hasArg("srv_min") && _server.hasArg("srv_max") &&
         _server.hasArg("up_pol") && _server.hasArg("lo_pol") &&
-        _server.hasArg("sv_pol") && _server.hasArg("lora_freq")) {
+        _server.hasArg("sv_pol") && _server.hasArg("p_key_off") &&
+        _server.hasArg("ex_pin_off") && _server.hasArg("lora_freq")) {
 
         RxConfig newConfig;
         newConfig.servoChannel = _server.arg("srv_chan").toInt();
@@ -208,6 +231,9 @@ void WebServerHandler::_handleSave() {
         newConfig.upperSwPolarity = _server.arg("up_pol").toInt();
         newConfig.lowerSwPolarity = _server.arg("lo_pol").toInt();
         newConfig.servoUpSwPolarity = _server.arg("sv_pol").toInt();
+
+        newConfig.powerKeyOffLevel = _server.arg("p_key_off").toInt();
+        newConfig.extraPinOffLevel = _server.arg("ex_pin_off").toInt();
 
         _configManager.saveConfig(newConfig);
 

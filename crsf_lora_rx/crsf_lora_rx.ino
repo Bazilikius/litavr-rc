@@ -2,8 +2,8 @@
  * CRSF LoRa Receiver & Outputs Controller for ESP32 (Dev Module)
  * - Receives channel broadcast from Transmitter via SX127x LoRa Module.
  * - Controls 2 synchronous servos (Left on GPIO 4, Right on GPIO 13) with Left and Right software inversions.
- * - Controls Extra Pin on GPIO 26 (replicates the active/trigger level of the servos).
- * - Controls Power Key Pin on GPIO 15 (outputs 0V/5V) with a 60-second delay logic.
+ * - Controls Extra Pin on GPIO 26 (replicates the active/trigger level of the servos) with configurable polarity.
+ * - Controls Power Key Pin on GPIO 15 (outputs 0V/5V) with configurable polarity and 60-second delay logic.
  * - Monitors 3 Limit Switches:
  *   1. Upper (GPIO 32) using INPUT_PULLUP.
  *   2. Lower (GPIO 33) using INPUT_PULLUP.
@@ -105,14 +105,14 @@ void setup() {
     // Start delay countdown timer immediately upon power-up
     loweredTimestamp = millis();
 
-    // Initialize Power Key Pin
-    pinMode(POWER_KEY_PIN, OUTPUT);
-    digitalWrite(POWER_KEY_PIN, LOW);
-    Serial.printf("Power Key initialized on GPIO %d (set to LOW).\n", POWER_KEY_PIN);
-
     // Load configurations
     configManager.begin();
     RxConfig activeConfig = configManager.getConfig();
+
+    // Initialize Power Key Pin with configured default inactive level
+    pinMode(POWER_KEY_PIN, OUTPUT);
+    digitalWrite(POWER_KEY_PIN, activeConfig.powerKeyOffLevel);
+    Serial.printf("Power Key initialized on GPIO %d (set to default inactive: %d).\n", POWER_KEY_PIN, activeConfig.powerKeyOffLevel);
 
     // Start Web Server
     webServer.begin();
@@ -212,11 +212,12 @@ void loop() {
         servoActive = true;
     }
 
-    // Replicate active servo state to Extra Pin (GPIO 26): HIGH when active (servos UP), LOW when inactive (servos DOWN)
-    digitalWrite(EXTRA_PIN, servoActive ? HIGH : LOW);
+    // Replicate active servo state to Extra Pin (GPIO 26): set to active state if active, otherwise inactive state
+    uint8_t extraPinState = servoActive ? (!activeConfig.extraPinOffLevel) : (activeConfig.extraPinOffLevel);
+    digitalWrite(EXTRA_PIN, extraPinState ? HIGH : LOW);
 
     // 60-second delay logic for Power Key (GPIO 15):
-    // Activates (HIGH) 60 seconds after the CRSF channel commands servos to go DOWN,
+    // Activates 60 seconds after the CRSF channel commands servos to go DOWN,
     // AND simultaneously: ALL THREE limit switches are in their non-triggered / safe / closed (OK) state.
     bool elapsed60s = (loweredTimestamp != 0 && (millis() - loweredTimestamp >= 60000));
     bool allThreeClosed = (!upperSwOpen) && (!lowerSwOpen) && (!servoUpSwTriggered);
@@ -224,7 +225,10 @@ void loop() {
     overrideActive = !allThreeClosed; // Show if they are not all closed
 
     bool powerKeyOn = elapsed60s && allThreeClosed;
-    digitalWrite(POWER_KEY_PIN, powerKeyOn ? HIGH : LOW);
+
+    // Apply power key active/inactive polarity level (0 = LOW is inactive, 1 = HIGH is inactive)
+    uint8_t powerKeyPinState = powerKeyOn ? (!activeConfig.powerKeyOffLevel) : (activeConfig.powerKeyOffLevel);
+    digitalWrite(POWER_KEY_PIN, powerKeyPinState ? HIGH : LOW);
 
     // Update Servos based on active state
     controller.updateServos(servoActive, activeConfig.servoMin, activeConfig.servoMax, activeConfig.servoInvertLeft != 0, activeConfig.servoInvertRight != 0);
@@ -241,7 +245,7 @@ void loop() {
                       lowerSwOpen ? "YES" : "NO",
                       servoUpSwTriggered ? "YES" : "NO",
                       servoActive ? "YES" : "NO",
-                      powerKeyOn ? "ON (5V)" : "OFF (0V)",
+                      powerKeyPinState ? "ACTIVE" : "INACTIVE",
                       secondsDown);
         lastReport = millis();
     }
