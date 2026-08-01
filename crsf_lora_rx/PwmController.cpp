@@ -41,36 +41,37 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     Serial.printf("[PWM] Initialized LEDC on LeftServo=%d, RightServo=%d | MosfetSwitchPin=%d, Extra=%d, LED=%d, UpperSw=%d, LowerSw=%d\n",
                   _leftServoPin, _rightServoPin, _mosfetPin, _extraPin, _ledPin, _upperSwPin, _lowerSwPin);
 
-    // Startup test sequence: sweep servos slowly and organically to verify hardware (500us -> 2500us -> 500us)
-    Serial.println("[PWM] Running synchronized boot-up diagnostics sweep (500us -> 2500us -> 500us)...");
+    // Startup test sequence: sweep servos slowly and synchronously to verify hardware (1500us -> 2200us -> 1500us)
+    Serial.println("[PWM] Running synchronized boot-up diagnostics sweep (1500us -> 2200us -> 1500us)...");
 
-    // Initialize starting positions
-    _currentLeftUs = 500.0f;
-    _currentRightUs = 500.0f;
+    // Initialize starting positions to their exact starting (inactive/DOWN) target based on the inversion parameters!
+    // This resolves the single-servo movement bug on boot!
+    _currentLeftUs = (float)(invertLeft ? maxUs : minUs);
+    _currentRightUs = (float)(invertRight ? maxUs : minUs);
     _leftVel = 0.0f;
     _rightVel = 0.0f;
     _lastUpdateMs = millis();
 
-    // Step 1: Sweep slowly UP from 500us to 2500us using the organic PD motion profile
-    Serial.println("[PWM] Sweeping UP (500 -> 2500)...");
+    // Step 1: Sweep slowly UP from 1500us to 2200us using the organic PD motion profile
+    Serial.println("[PWM] Sweeping UP (1500 -> 2200)...");
     while (true) {
-        updateServos(true, 500, 2500, invertLeft, invertRight);
+        updateServos(true, 1500, 2200, invertLeft, invertRight);
 
-        // Break once we are extremely close to the target of 2500us
-        float leftTarget = invertLeft ? 500.0f : 2500.0f;
+        // Break once Left Servo reaches its active target (taking inversion into account)
+        float leftTarget = invertLeft ? 1500.0f : 2200.0f;
         if (abs(_currentLeftUs - leftTarget) < 1.0f) {
             break;
         }
         delay(15); // Smooth step delay
     }
 
-    // Step 2: Sweep slowly DOWN from 2500us to 500us using the organic PD motion profile
-    Serial.println("[PWM] Sweeping DOWN (2500 -> 500)...");
+    // Step 2: Sweep slowly DOWN from 2200us to 1500us using the organic PD motion profile
+    Serial.println("[PWM] Sweeping DOWN (2200 -> 1500)...");
     while (true) {
-        updateServos(false, 500, 2500, invertLeft, invertRight);
+        updateServos(false, 1500, 2200, invertLeft, invertRight);
 
-        // Break once we are extremely close to the target of 500us
-        float leftTarget = invertLeft ? 2500.0f : 500.0f;
+        // Break once Left Servo reaches its inactive target (taking inversion into account)
+        float leftTarget = invertLeft ? 2200.0f : 1500.0f;
         if (abs(_currentLeftUs - leftTarget) < 1.0f) {
             break;
         }
@@ -109,7 +110,7 @@ void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, 
     leftTarget = constrain(leftTarget, 500.0f, 2500.0f);
     rightTarget = constrain(rightTarget, 500.0f, 2500.0f);
 
-    // Initialize current positions on the first run
+    // Initialize current positions to target on the first run if uninitialized
     if (_currentLeftUs == 0.0f || _currentRightUs == 0.0f) {
         _currentLeftUs = leftTarget;
         _currentRightUs = rightTarget;
@@ -127,16 +128,17 @@ void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, 
         // --- Industrial-Grade Proportional-Derivative (PD) Trajectory Profile ---
         // Acceleration = (Spring Pull towards Target) - (Damping friction based on Velocity)
         // This naturally limits acceleration and jerk, creating beautiful smooth S-curve starts and stops.
-        float Kp = 0.000004f; // Spring stiffness (lower = slower acceleration & softer starts)
-        float Kd = 0.035f;    // Friction damping (prevents oscillation and ensures smooth deceleration)
+        float Kp = 0.000004f; // Spring stiffness
+        float Kd = 0.035f;    // Friction damping
 
         // Left Servo PD update
         float leftError = leftTarget - _currentLeftUs;
         float leftAccel = (leftError * Kp) - (Kd * _leftVel);
         _leftVel += leftAccel * elapsed;
 
-        // Speed cap for slow, majestic movements (~500us to 2500us over 60-90 seconds)
-        float maxVel = 0.025f;
+        // Speed cap for slow, majestic movements (250us range over exactly 60 seconds)
+        // Rate: 250.0f / 60000.0f = 1.0f / 240.0f = 0.004166667f microseconds per millisecond.
+        float maxVel = 0.004166667f;
         if (_leftVel > maxVel) _leftVel = maxVel;
         if (_leftVel < -maxVel) _leftVel = -maxVel;
 
