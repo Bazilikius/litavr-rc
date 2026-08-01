@@ -8,7 +8,7 @@
 
 class WebServerHandler {
 public:
-    WebServerHandler(ConfigManager &configManager, uint32_t &packetCount, uint16_t *channels, bool &upperSw, bool &lowerSw, bool &servoUpSw, bool &overrideActive);
+    WebServerHandler(ConfigManager &configManager, uint32_t &packetCount, uint16_t *channels, bool &upperSw, bool &lowerSw, bool &servoUpSw, bool &overrideActive, uint32_t &loweredTimestamp);
     void begin();
     void handleClient();
 
@@ -20,6 +20,7 @@ private:
     bool &_lowerSw;
     bool &_servoUpSw;
     bool &_overrideActive;
+    uint32_t &_loweredTimestamp;
     WebServer _server;
 
     void _handleRoot();

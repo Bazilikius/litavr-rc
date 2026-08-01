@@ -1,7 +1,7 @@
 #include "WebServerHandler.h"
 
-WebServerHandler::WebServerHandler(ConfigManager &configManager, uint32_t &packetCount, uint16_t *channels, bool &upperSw, bool &lowerSw, bool &servoUpSw, bool &overrideActive)
-    : _configManager(configManager), _packetCount(packetCount), _channels(channels), _upperSw(upperSw), _lowerSw(lowerSw), _servoUpSw(servoUpSw), _overrideActive(overrideActive), _server(80) {}
+WebServerHandler::WebServerHandler(ConfigManager &configManager, uint32_t &packetCount, uint16_t *channels, bool &upperSw, bool &lowerSw, bool &servoUpSw, bool &overrideActive, uint32_t &loweredTimestamp)
+    : _configManager(configManager), _packetCount(packetCount), _channels(channels), _upperSw(upperSw), _lowerSw(lowerSw), _servoUpSw(servoUpSw), _overrideActive(overrideActive), _loweredTimestamp(loweredTimestamp), _server(80) {}
 
 void WebServerHandler::begin() {
     // Start AP Mode
@@ -72,6 +72,7 @@ void WebServerHandler::_handleRoot() {
     html += "    document.getElementById('lowerSw').className = data.lowerSw ? 'status-indicator' : 'status-indicator status-ok';";
     html += "    document.getElementById('servoUpSw').innerText = data.servoUpSw ? 'АКТИВНИЙ / triggered (Servos UP)' : 'CLOSED / OK';";
     html += "    document.getElementById('servoUpSw').className = data.servoUpSw ? 'status-indicator' : 'status-indicator status-ok';";
+    html += "    document.getElementById('countdown').innerText = data.countdown;";
     html += "    for(let i=0; i<16; i++) {";
     html += "      const cell = document.getElementById('ch' + i);";
     html += "      if(cell) cell.innerText = 'CH' + (i+1) + ': ' + data.channels[i];";
@@ -95,6 +96,7 @@ void WebServerHandler::_handleRoot() {
     html += "<p>Верхній кінцевик (GPIO 32): <span id='upperSw' class='status-indicator'>-</span></p>";
     html += "<p>Нижній кінцевик (GPIO 33): <span id='lowerSw' class='status-indicator'>-</span></p>";
     html += "<p>Кінцевик Servo UP (GPIO 25): <span id='servoUpSw' class='status-indicator'>-</span></p>";
+    html += "<p>Час до активації ключа (GPIO 15): <span id='countdown' style='font-weight: bold;'>-</span> сек</p>";
     html += "<strong>Значення каналів:</strong>";
     html += "<div class='grid'>";
     for (int i = 0; i < 16; i++) {
@@ -234,12 +236,19 @@ void WebServerHandler::_handleSave() {
 }
 
 void WebServerHandler::_handleStatus() {
+    uint32_t remaining = 60;
+    if (_loweredTimestamp != 0) {
+        uint32_t elapsed = (millis() - _loweredTimestamp) / 1000;
+        remaining = (elapsed < 60) ? (60 - elapsed) : 0;
+    }
+
     String json = "{";
     json += "\"packets\":" + String(_packetCount) + ",";
     json += "\"upperSw\":" + String(_upperSw ? 1 : 0) + ",";
     json += "\"lowerSw\":" + String(_lowerSw ? 1 : 0) + ",";
     json += "\"servoUpSw\":" + String(_servoUpSw ? 1 : 0) + ",";
     json += "\"override\":" + String(_overrideActive ? 1 : 0) + ",";
+    json += "\"countdown\":" + String(remaining) + ",";
     json += "\"channels\":[";
     for (int i = 0; i < 16; i++) {
         json += String(_channels[i]);

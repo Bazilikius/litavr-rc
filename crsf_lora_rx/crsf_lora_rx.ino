@@ -74,7 +74,7 @@ struct LoraPacket {
     uint16_t channels[16];
 } loraPacket;
 
-WebServerHandler webServer(configManager, packetCount, channels, upperSwOpen, lowerSwOpen, servoUpSwTriggered, overrideActive);
+WebServerHandler webServer(configManager, packetCount, channels, upperSwOpen, lowerSwOpen, servoUpSwTriggered, overrideActive, loweredTimestamp);
 
 uint32_t lastReport = 0;
 
@@ -122,8 +122,11 @@ void setup() {
         lora.startReceive();
     }
 
-    // Initialize Outputs with correct left/right inversions and run synchronized self-test sweep
-    controller.begin(activeConfig.servoInvertLeft != 0, activeConfig.servoInvertRight != 0, activeConfig.servoMin, activeConfig.servoMax);
+    // Evaluate Upper Limit Switch state at boot using the loaded polarity settings to initialize position organically!
+    bool isUpperTriggeredAtBoot = (digitalRead(UPPER_SW_PIN) == (activeConfig.upperSwPolarity != 0));
+
+    // Initialize Outputs with correct left/right inversions and run synchronized, slow self-test sweep
+    controller.begin(activeConfig.servoInvertLeft != 0, activeConfig.servoInvertRight != 0, activeConfig.servoMin, activeConfig.servoMax, isUpperTriggeredAtBoot);
 }
 
 void loop() {

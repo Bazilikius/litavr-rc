@@ -5,8 +5,8 @@ ConfigManager::ConfigManager() {
     _currentConfig.servoTrigger = 1500;
     _currentConfig.servoInvertLeft = 0;
     _currentConfig.servoInvertRight = 0;
-    _currentConfig.servoMin = 1500; // Starting point: 1500us
-    _currentConfig.servoMax = 2200; // End point: 2200us
+    _currentConfig.servoMin = 1500; // Default minimum set to 1500us
+    _currentConfig.servoMax = 2200; // Default maximum set to 2200us
     _currentConfig.loraFreq = 433000000;
 
     _currentConfig.upperSwPolarity = 1;   // default Active HIGH (Open)

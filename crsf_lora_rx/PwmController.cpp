@@ -10,12 +10,18 @@
 
 PwmController::PwmController(uint8_t leftServoPin, uint8_t rightServoPin, uint8_t mosfetPin, uint8_t extraPin, uint8_t ledPin, uint8_t upperSwPin, uint8_t lowerSwPin)
     : _leftServoPin(leftServoPin), _rightServoPin(rightServoPin), _mosfetPin(mosfetPin), _extraPin(extraPin), _ledPin(ledPin), _upperSwPin(upperSwPin), _lowerSwPin(lowerSwPin),
-      _currentLeftUs(0.0f), _currentRightUs(0.0f), _leftVel(0.0f), _rightVel(0.0f), _lastUpdateMs(0) {}
+      _currentLeftUs(0.0f), _currentRightUs(0.0f), _lastUpdateMs(0) {}
 
-void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uint16_t maxUs) {
+void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uint16_t maxUs, bool isUpperTriggeredAtBoot) {
     // Other digital outputs
     pinMode(_extraPin, OUTPUT);
     pinMode(_ledPin, OUTPUT);
+
+    // Initialize physical indicators: Red LED on GPIO 21, Blue LED on GPIO 22
+    pinMode(21, OUTPUT);
+    pinMode(22, OUTPUT);
+    digitalWrite(21, HIGH); // Red ON (booting/moving)
+    digitalWrite(22, LOW);  // Blue OFF
 
     // GPIO 25 is a limit switch input with pullup
     pinMode(_mosfetPin, INPUT_PULLUP);
@@ -41,41 +47,45 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     Serial.printf("[PWM] Initialized LEDC on LeftServo=%d, RightServo=%d | MosfetSwitchPin=%d, Extra=%d, LED=%d, UpperSw=%d, LowerSw=%d\n",
                   _leftServoPin, _rightServoPin, _mosfetPin, _extraPin, _ledPin, _upperSwPin, _lowerSwPin);
 
-    // Startup test sequence: sweep servos slowly and synchronously to verify hardware (1500us -> 2200us -> 1500us)
-    Serial.println("[PWM] Running synchronized boot-up diagnostics sweep (1500us -> 2200us -> 1500us)...");
+    // Set starting positions organically based on the Upper Limit Switch state at boot!
+    // This prevents any unnecessary travel, jumps, or jerks on startup!
+    if (isUpperTriggeredAtBoot) {
+        Serial.println("[PWM] Upper Limit Switch triggered at boot. Initializing servos in active/UP position.");
+        _currentLeftUs = (float)(invertLeft ? minUs : maxUs);
+        _currentRightUs = (float)(invertRight ? minUs : maxUs);
+    } else {
+        Serial.println("[PWM] Upper Limit Switch not triggered. Initializing servos in inactive/DOWN position.");
+        _currentLeftUs = (float)(invertLeft ? maxUs : minUs);
+        _currentRightUs = (float)(invertRight ? maxUs : minUs);
+    }
 
-    // Initialize starting positions to their exact starting (inactive/DOWN) target based on the inversion parameters!
-    // This resolves the single-servo movement bug on boot!
-    _currentLeftUs = (float)(invertLeft ? maxUs : minUs);
-    _currentRightUs = (float)(invertRight ? maxUs : minUs);
-    _leftVel = 0.0f;
-    _rightVel = 0.0f;
     _lastUpdateMs = millis();
 
-    // Step 1: Sweep UP from 1500us to 2200us using the organic PD motion profile
+    // Startup test sweep (Neutral Start -> Active -> Neutral Start) using smooth update loops
+    Serial.println("[PWM] Running synchronized boot-up diagnostics sweep (1500us -> 2200us -> 1500us)...");
+
+    // Step 1: Sweep slowly UP from 1500us to 2200us
     Serial.println("[PWM] Sweeping UP (1500 -> 2200)...");
     while (true) {
         updateServos(true, 1500, 2200, invertLeft, invertRight);
 
-        // Break once Left Servo reaches its active target (taking inversion into account)
         float leftTarget = invertLeft ? 1500.0f : 2200.0f;
         if (abs(_currentLeftUs - leftTarget) < 1.0f) {
             break;
         }
-        delay(15); // Smooth step delay
+        delay(15);
     }
 
-    // Step 2: Sweep DOWN from 2200us to 1500us using the organic PD motion profile
+    // Step 2: Sweep slowly DOWN from 2200us to 1500us
     Serial.println("[PWM] Sweeping DOWN (2200 -> 1500)...");
     while (true) {
         updateServos(false, 1500, 2200, invertLeft, invertRight);
 
-        // Break once Left Servo reaches its inactive target (taking inversion into account)
         float leftTarget = invertLeft ? 2200.0f : 1500.0f;
         if (abs(_currentLeftUs - leftTarget) < 1.0f) {
             break;
         }
-        delay(15); // Smooth step delay
+        delay(15);
     }
 
     // Toggle Extra & LED
@@ -84,6 +94,10 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     delay(300);
     digitalWrite(_extraPin, LOW);
     digitalWrite(_ledPin, LOW);
+
+    // Initial state: stationary (Blue ON, Red OFF)
+    digitalWrite(21, LOW);
+    digitalWrite(22, HIGH);
 
     Serial.println("[PWM] Diagnostics complete. Outputs Ready.");
 }
@@ -114,8 +128,6 @@ void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, 
     if (_currentLeftUs == 0.0f || _currentRightUs == 0.0f) {
         _currentLeftUs = leftTarget;
         _currentRightUs = rightTarget;
-        _leftVel = 0.0f;
-        _rightVel = 0.0f;
         _lastUpdateMs = millis();
     }
 
@@ -125,34 +137,37 @@ void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, 
     if (elapsed > 0) {
         _lastUpdateMs = now;
 
-        // --- Industrial-Grade Proportional-Derivative (PD) Trajectory Profile ---
-        // Acceleration = (Spring Pull towards Target) - (Damping friction based on Velocity)
-        // This naturally limits acceleration and jerk, creating beautiful smooth S-curve starts and stops.
-        float Kp = 0.000004f; // Spring stiffness
-        float Kd = 0.035f;    // Friction damping
+        // --- Fast, Symmetric Slew-Rate Limiter (Constant speed in both directions) ---
+        // Speed: 0.35us per millisecond. Traveling the full 700us range (1500 to 2200) takes exactly 1.75 seconds.
+        float maxStep = (float)elapsed * 0.35f;
 
-        // Left Servo PD update
-        float leftError = leftTarget - _currentLeftUs;
-        float leftAccel = (leftError * Kp) - (Kd * _leftVel);
-        _leftVel += leftAccel * elapsed;
+        // Smoothly adjust Left Servo
+        if (_currentLeftUs < leftTarget) {
+            _currentLeftUs += maxStep;
+            if (_currentLeftUs > leftTarget) _currentLeftUs = leftTarget;
+        } else if (_currentLeftUs > leftTarget) {
+            _currentLeftUs -= maxStep;
+            if (_currentLeftUs < leftTarget) _currentLeftUs = leftTarget;
+        }
 
-        // Speed limit step: 1.0f / 10.0f = 0.1us per millisecond.
-        // Full travel range of 700us takes exactly 7.0 seconds.
-        float maxVel = 0.100000000f;
-        if (_leftVel > maxVel) _leftVel = maxVel;
-        if (_leftVel < -maxVel) _leftVel = -maxVel;
+        // Smoothly adjust Right Servo
+        if (_currentRightUs < rightTarget) {
+            _currentRightUs += maxStep;
+            if (_currentRightUs > rightTarget) _currentRightUs = rightTarget;
+        } else if (_currentRightUs > rightTarget) {
+            _currentRightUs -= maxStep;
+            if (_currentRightUs < rightTarget) _currentRightUs = rightTarget;
+        }
+    }
 
-        _currentLeftUs += _leftVel * elapsed;
-
-        // Right Servo PD update
-        float rightError = rightTarget - _currentRightUs;
-        float rightAccel = (rightError * Kp) - (Kd * _rightVel);
-        _rightVel += rightAccel * elapsed;
-
-        if (_rightVel > maxVel) _rightVel = maxVel;
-        if (_rightVel < -maxVel) _rightVel = -maxVel;
-
-        _currentRightUs += _rightVel * elapsed;
+    // Toggle Red/Blue LEDs to indicate motion: Red (GPIO 21) = moving, Blue (GPIO 22) = completed/stationary
+    bool moving = (abs(_currentLeftUs - leftTarget) > 0.5f) || (abs(_currentRightUs - rightTarget) > 0.5f);
+    if (moving) {
+        digitalWrite(21, HIGH); // Red ON
+        digitalWrite(22, LOW);  // Blue OFF
+    } else {
+        digitalWrite(21, LOW);  // Red OFF
+        digitalWrite(22, HIGH); // Blue ON
     }
 
     writeMicros(_leftServoPin, (uint32_t)_currentLeftUs);
