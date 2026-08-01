@@ -6,7 +6,7 @@
 class PwmController {
 public:
     PwmController(uint8_t leftServoPin, uint8_t rightServoPin, uint8_t mosfetPin, uint8_t extraPin, uint8_t ledPin, uint8_t upperSwPin, uint8_t lowerSwPin, uint8_t powerKeyPin);
-    void begin(bool invertLeft, bool invertRight, uint16_t minUs, uint16_t maxUs);
+    void begin(bool invertLeft, bool invertRight, uint16_t minUs, uint16_t maxUs, bool isUpperTriggeredAtBoot);
 
     // Reads limit switches, returns true if at least one is open (reads HIGH)
     bool isAnyLimitSwitchOpen();
