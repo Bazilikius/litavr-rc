@@ -15,7 +15,8 @@ PwmController::PwmController(uint8_t leftServoPin, uint8_t rightServoPin, uint8_
       _currentLeftUs(0.0f), _currentRightUs(0.0f), _lastUpdateMs(0) {}
 
 void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uint16_t maxUs, bool isUpperTriggeredAtBoot) {
-    // LED Pin
+    // Other digital outputs
+    pinMode(_extraPin, OUTPUT);
     pinMode(_ledPin, OUTPUT);
 
     // Initialize physical indicators: Red LED on GPIO 21, Blue LED on GPIO 22
@@ -73,28 +74,34 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     // Startup test sequence: sweep servos slowly and synchronously to verify hardware (1500us -> 2200us -> 1500us)
     Serial.println("[PWM] Running synchronized boot-up diagnostics sweep (1500us -> 2200us -> 1500us)...");
 
-    // Step 1: Sweep UP from 1500us to 2200us
+    // Step 1: Sweep UP from 1500us to 2200us (with a safety timeout to prevent boot hang)
     Serial.println("[PWM] Sweeping UP (1500 -> 2200)...");
-    while (true) {
+    uint32_t safetyCount = 0;
+    while (safetyCount < 300) {
         updateServos(true, 1500, 2200, invertLeft, invertRight);
 
+        // Break once Left Servo reaches its active target (taking inversion into account)
         float leftTarget = invertLeft ? 1500.0f : 2200.0f;
-        if (abs(_currentLeftUs - leftTarget) < 1.0f) {
+        if (abs(_currentLeftUs - leftTarget) < 2.0f) {
             break;
         }
-        delay(15);
+        delay(15); // Smooth step delay
+        safetyCount++;
     }
 
-    // Step 2: Sweep DOWN from 2200us to 1500us
+    // Step 2: Sweep DOWN from 2200us to 1500us (with a safety timeout to prevent boot hang)
     Serial.println("[PWM] Sweeping DOWN (2200 -> 1500)...");
-    while (true) {
+    safetyCount = 0;
+    while (safetyCount < 300) {
         updateServos(false, 1500, 2200, invertLeft, invertRight);
 
+        // Break once Left Servo reaches its inactive target (taking inversion into account)
         float leftTarget = invertLeft ? 2200.0f : 1500.0f;
-        if (abs(_currentLeftUs - leftTarget) < 1.0f) {
+        if (abs(_currentLeftUs - leftTarget) < 2.0f) {
             break;
         }
-        delay(15);
+        delay(15); // Smooth step delay
+        safetyCount++;
     }
 
     // Toggle Extra & LED
@@ -181,17 +188,18 @@ void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, 
     writeMicros(_rightServoPin, (uint32_t)_currentRightUs);
 }
 
-void PwmController::updatePwmOutputs(bool isExtraActive, bool isPowerKeyActive, uint8_t extraOffLevel, uint8_t powerKeyOffLevel) {
-    // Generate precise 50Hz PWM signals for the RC switches on GPIO 26 and GPIO 15
-    // Default Active: 2000us, Inactive: 1000us
+void PwmController::updateOutputs(bool isActive, uint8_t offLevel) {
+    uint8_t outputState;
 
-    // GPIO 26 Extra Pin (RC Switch)
-    uint32_t extraUs = isExtraActive ? (!extraOffLevel ? 2000 : 1000) : (extraOffLevel ? 2000 : 1000);
-    writeMicros(_extraPin, extraUs);
+    if (isActive) {
+        // ON state is the opposite of offLevel
+        outputState = (offLevel == 0) ? HIGH : LOW;
+    } else {
+        // OFF state is offLevel
+        outputState = (offLevel == 0) ? LOW : HIGH;
+    }
 
-    // GPIO 15 Power Key Pin (RC Switch)
-    uint32_t powerKeyUs = isPowerKeyActive ? (!powerKeyOffLevel ? 2000 : 1000) : (powerKeyOffLevel ? 2000 : 1000);
-    writeMicros(_powerKeyPin, powerKeyUs);
+    digitalWrite(_extraPin, outputState);
 }
 
 void PwmController::writeMicros(uint8_t pin, uint32_t us) {
