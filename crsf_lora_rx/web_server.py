@@ -2,6 +2,7 @@ import socket
 import network
 import machine
 import json
+import time
 
 def url_decode(s):
     res = s.replace("+", " ")
@@ -31,8 +32,6 @@ class WebServer:
         ap.active(True)
         ap.config(essid="CRSF-Config-RX", password="12345678")
 
-        # Max TX power range is typically 0-78 on ESP32 (approx 19.5dBm max)
-        # To limit Tx Power to 25%, we can set it to a lower value in ap.config (e.g. 8)
         try:
             ap.config(txpower=8)
             print("[Web] WiFi softAP 'CRSF-Config-RX' started at 25% TX power.")
@@ -58,13 +57,30 @@ class WebServer:
             return
 
         try:
-            client.settimeout(1.0)
-            req = client.recv(1024).decode("utf-8", "ignore")
+            # Set non-blocking to prevent stalling the main loop and blocking the servos!
+            client.setblocking(False)
+            req = b""
+            start_time = time.ticks_ms()
+            # Read request with a tight 5ms maximum time budget
+            while time.ticks_diff(time.ticks_ms(), start_time) < 5:
+                try:
+                    data = client.recv(1024)
+                    if data:
+                        req += data
+                        if b"\r\n\r\n" in req or len(req) > 1024:
+                            break
+                    else:
+                        break
+                except OSError:
+                    # No data available yet
+                    time.sleep_us(100)
+
             if not req:
                 client.close()
                 return
 
-            lines = req.split("\r\n")
+            req_str = req.decode("utf-8", "ignore")
+            lines = req_str.split("\r\n")
             first_line = lines[0].split()
             if len(first_line) < 2:
                 client.close()
@@ -75,11 +91,12 @@ class WebServer:
             if path == "/status":
                 self._send_status(client)
             elif path.startswith("/save"):
-                self._send_save(client, req)
+                self._send_save(client, req_str)
             else:
                 self._send_root(client)
         except Exception as e:
-            print("[Web] Error handling socket request:", e)
+            # Silent pass to keep loop executing cleanly without interruption
+            pass
         finally:
             try:
                 client.close()
@@ -298,8 +315,6 @@ class WebServer:
         client.send(response.encode("utf-8"))
 
     def _send_save(self, client, req):
-        # Extract query parameters from request path
-        # Format: GET /save?box_id=1&box_sel_ch=15... HTTP/1.1
         try:
             path_line = req.split("\r\n")[0]
             path = path_line.split()[1]
