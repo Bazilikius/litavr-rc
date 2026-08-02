@@ -2,9 +2,10 @@
  * CRSF LoRa Receiver & Outputs Controller for ESP32 (Dev Module)
  * - Receives channel broadcast from Transmitter via SX127x LoRa Module.
  * - Controls 2 synchronous servos (Left on GPIO 4, Right on GPIO 13) with Left and Right software inversions.
- * - Monitors 2 Limit Switches:
+ * - Monitors 3 Limit Switches:
  *   1. Upper (GPIO 32) using INPUT_PULLUP.
  *   2. Lower (GPIO 33) using INPUT_PULLUP.
+ *   3. Servo-UP Switch (GPIO 25) using INPUT_PULLUP.
  * - LED (GPIO 27) lights up when Upper Limit Switch is open (HIGH).
  * - Automatic WiFi and AP shutdown 3 minutes after boot (180,000 ms) to reduce noise.
  * - Implement 8-box mesh selection logic using Box Selection Channel (1000-2000us range partitioned in 8 segments).
@@ -14,10 +15,12 @@
  * - Automation Logic for Power Key Pin (GPIO 15):
  *   - Power Key (GPIO 15) turns ACTIVE (2000us 50Hz PWM) only if:
  *     a) 60 seconds have elapsed since the servos were commanded DOWN (inactive).
- *     b) AND simultaneously: both limit switches (Upper and Lower) are CLOSED (LOW / OK).
+ *     b) AND simultaneously: all three limit switches are CLOSED (LOW / OK).
  *   - If servos are active (UP), or if any limit switch is open, or if the box is not selected, GPIO 15 goes INACTIVE immediately.
  * - If any limit switch is open (HIGH):
  *   - MOSFET is forced to the configured OFF level (1000us or 2000us PWM).
+ * - GPIO 21 (Red LED) blinks at 500ms intervals during 60s countdown, stays ON constantly when countdown elapses, stays OFF otherwise.
+ * - GPIO 22 (Blue LED) blinks at 200ms intervals when servos are moving, stays ON constantly when stationary.
  * - Reduced WiFi Transmit Power to 25% (WIFI_POWER_5dBm).
  */
 
@@ -36,6 +39,7 @@
 #define LED_PIN         27 // Status Indicator LED
 #define UPPER_SW_PIN    32 // Upper Limit Switch
 #define LOWER_SW_PIN    33 // Lower Limit Switch
+#define SERVO_UP_SW_PIN 25 // 3rd Limit Switch / Servo-UP Override
 
 // LoRa SPI Pin Configuration
 #define LORA_SS    5
@@ -54,14 +58,17 @@ uint32_t packetCount = 0;
 uint16_t channels[16];
 bool upperSwOpen = false;       // True if Upper Switch is open (HIGH)
 bool lowerSwOpen = false;       // True if Lower Switch is open (HIGH)
+bool servoUpSwOpen = false;     // True if Servo-UP Switch is open (HIGH)
 bool overrideActive = false;    // True if at least one switch is open
 
 // Debounce variables for mechanical limit switches
 uint32_t lastUpperSwTime = 0;
 uint32_t lastLowerSwTime = 0;
+uint32_t lastServoUpSwTime = 0;
 
 bool debouncedUpperSw = false; // true = pin is HIGH, false = pin is LOW
 bool debouncedLowerSw = false; // true = pin is HIGH, false = pin is LOW
+bool debouncedServoUpSw = false; // true = pin is HIGH, false = pin is LOW
 
 const uint32_t DEBOUNCE_DELAY_MS = 50; // 50ms stable window
 
@@ -74,7 +81,7 @@ struct LoraPacket {
     uint16_t channels[16];
 } loraPacket;
 
-WebServerHandler webServer(configManager, packetCount, channels, upperSwOpen, lowerSwOpen, overrideActive, loweredTimestamp);
+WebServerHandler webServer(configManager, packetCount, channels, upperSwOpen, lowerSwOpen, servoUpSwOpen, overrideActive, loweredTimestamp);
 
 uint32_t lastReport = 0;
 bool wifiShutDownDone = false;
@@ -111,6 +118,11 @@ void setup() {
     for (int i = 0; i < 16; i++) {
         channels[i] = 1500;
     }
+
+    // Configure Limit Switches early as INPUT_PULLUP to ensure accurate boot readings
+    pinMode(UPPER_SW_PIN, INPUT_PULLUP);
+    pinMode(LOWER_SW_PIN, INPUT_PULLUP);
+    pinMode(SERVO_UP_SW_PIN, INPUT_PULLUP);
 
     // Start delay countdown timer immediately upon power-up
     loweredTimestamp = millis();
@@ -168,6 +180,7 @@ void loop() {
     // 4. Read Limit Switches & Apply Software Debounce
     bool rawUpper = (digitalRead(UPPER_SW_PIN) == HIGH);
     bool rawLower = (digitalRead(LOWER_SW_PIN) == HIGH);
+    bool rawServoUp = (digitalRead(SERVO_UP_SW_PIN) == HIGH);
 
     if (rawUpper != debouncedUpperSw) {
         if (millis() - lastUpperSwTime > DEBOUNCE_DELAY_MS) {
@@ -187,12 +200,22 @@ void loop() {
         lastLowerSwTime = millis();
     }
 
+    if (rawServoUp != debouncedServoUpSw) {
+        if (millis() - lastServoUpSwTime > DEBOUNCE_DELAY_MS) {
+            debouncedServoUpSw = rawServoUp;
+            lastServoUpSwTime = millis();
+        }
+    } else {
+        lastServoUpSwTime = millis();
+    }
+
     // 5. Run Trigger Logic and update Outputs
     RxConfig activeConfig = configManager.getConfig();
 
     // Switch is open if debounced input reads HIGH
     upperSwOpen = debouncedUpperSw;
     lowerSwOpen = debouncedLowerSw;
+    servoUpSwOpen = debouncedServoUpSw;
 
     // LED glows if Upper switch is open
     digitalWrite(LED_PIN, upperSwOpen ? HIGH : LOW);
@@ -209,13 +232,13 @@ void loop() {
     bool servoActive = false;
     bool mosfetActive = false;
 
-    // Safety Override: if either limit switch is open, force disabled states
-    bool isAnyOpen = upperSwOpen || lowerSwOpen;
+    // Safety Override: if ANY of the three limit switches is open, force disabled states
+    bool isAnyOpen = upperSwOpen || lowerSwOpen || servoUpSwOpen;
     overrideActive = isAnyOpen;
 
     if (isMyBoxSelected) {
-        if (triggerActive) {
-            servoActive = true;             // Move servos to 2000us
+        if (triggerActive || servoUpSwOpen) {
+            servoActive = true;             // Move servos UP (override UP if GPIO 25 is open)
             if (!isAnyOpen) {
                 mosfetActive = true;        // Output 1500us PWM on MOSFET (GPIO 26)
             }
@@ -232,35 +255,64 @@ void loop() {
     controller.updateServos(servoActive, activeConfig.servoMin, activeConfig.servoMax, activeConfig.servoInvertLeft != 0, activeConfig.servoInvertRight != 0, activeConfig.servoSpeed);
 
     // --- 60-Second Delay Automation Logic for GPIO 15 (Extra Pin / Power Key) ---
-    // Track when servos are in inactive/DOWN state
-    if (isMyBoxSelected && !servoActive) {
+    // Timer starts/retains ONLY when ALL THREE limit switches are CLOSED (LOW / OK) AND servos are commanded DOWN!
+    bool allThreeClosed = !isAnyOpen;
+    bool timerEnabled = isMyBoxSelected && !servoActive && allThreeClosed;
+
+    if (timerEnabled) {
         if (loweredTimestamp == 0) {
             loweredTimestamp = millis();
         }
     } else {
-        loweredTimestamp = 0; // Reset countdown if servos move UP or module is unselected
+        loweredTimestamp = 0; // Reset countdown if any switch opens, servos move UP, or unit is unselected
     }
 
-    // Power Key Pin (GPIO 15) activates (outputs 2000us PWM) ONLY if:
-    // 1. 60 seconds have elapsed since servos went inactive (DOWN).
-    // 2. AND both limit switches are closed (no override active).
     bool elapsed60s = (loweredTimestamp != 0 && (millis() - loweredTimestamp >= 60000));
-    bool extraActive = elapsed60s && !isAnyOpen;
+    bool extraActive = elapsed60s && allThreeClosed;
 
     // Update 50Hz LEDC PWM Outputs: GPIO 26 (MOSFET) and GPIO 15 (Extra / Power Key)
     controller.updatePwmOutputs(mosfetActive, extraActive, activeConfig.mosfetOffLevel);
+
+    // --- Dynamic LED Indicator logic (GPIO 21 and GPIO 22) ---
+    // GPIO 21 (Red LED) behavior:
+    // - Blinks (500ms intervals) during 60-second countdown (counting down).
+    // - ON constantly when countdown elapses (timer reached 0 and extra pin active).
+    // - OFF otherwise.
+    if (loweredTimestamp != 0) {
+        if (elapsed60s) {
+            digitalWrite(21, HIGH); // Timer finished -> Solid Red ON
+        } else {
+            // Blinking Red LED during countdown (500ms intervals)
+            bool blinkState = (millis() / 500) % 2 == 0;
+            digitalWrite(21, blinkState ? HIGH : LOW);
+        }
+    } else {
+        digitalWrite(21, LOW); // Timer not running -> Red OFF
+    }
+
+    // GPIO 22 (Blue LED) behavior:
+    // - Blinks (200ms intervals) when servos are moving.
+    // - ON constantly when servos are stationary.
+    bool servosMoving = controller.isServoMoving(servoActive, activeConfig.servoMin, activeConfig.servoMax, activeConfig.servoInvertLeft != 0, activeConfig.servoInvertRight != 0);
+    if (servosMoving) {
+        bool blinkState = (millis() / 200) % 2 == 0;
+        digitalWrite(22, blinkState ? HIGH : LOW);
+    } else {
+        digitalWrite(22, HIGH); // Solid Blue ON when stationary
+    }
 
     yield();
 
     // 6. Diagnostics reporting
     if (millis() - lastReport > 5000) {
         uint32_t secondsDown = (loweredTimestamp != 0) ? (millis() - loweredTimestamp) / 1000 : 0;
-        Serial.printf("[RX] SelectedBox:%d (MyBox:%d, Selected:%s) | UpperOpen: %s | LowerOpen: %s | Servos: %s | MOSFET: %s | Extra (Delay %us): %s\n",
+        Serial.printf("[RX] SelectedBox:%d (MyBox:%d, Selected:%s) | UpperOpen: %s | LowerOpen: %s | ServoUpOpen: %s | Servos: %s | MOSFET: %s | Extra (Delay %us): %s\n",
                       currentSelectedBox,
                       activeConfig.boxId,
                       isMyBoxSelected ? "YES" : "NO",
                       upperSwOpen ? "YES" : "NO",
                       lowerSwOpen ? "YES" : "NO",
+                      servoUpSwOpen ? "YES" : "NO",
                       servoActive ? "ACTIVE (2000us)" : "NEUTRAL (1500us)",
                       mosfetActive ? "ACTIVE (1500us)" : "OFF",
                       secondsDown,

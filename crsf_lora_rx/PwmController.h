@@ -11,6 +11,9 @@ public:
     // Updates physical servo values based on activation state and configuration, respecting left/right inversions (using 2-line inversion logic with customizable speed limiting)
     void updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, bool invertLeft, bool invertRight, uint16_t speedUsPerSec);
 
+    // Returns true if either Left or Right servo is currently in motion
+    bool isServoMoving(bool isActive, uint16_t minUs, uint16_t maxUs, bool invertLeft, bool invertRight);
+
     // Updates Extra Pin (GPIO 15) and MOSFET Pin (GPIO 26) values via 50Hz LEDC PWM signals
     void updatePwmOutputs(bool isMosfetActive, bool isExtraActive, uint8_t mosfetOffLevel);
 

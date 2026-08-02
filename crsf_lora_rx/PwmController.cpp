@@ -130,18 +130,15 @@ void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, 
         }
     }
 
-    // Toggle Red/Blue LEDs to indicate motion: Red (GPIO 21) = moving, Blue (GPIO 22) = completed/stationary
-    bool moving = (abs(_currentLeftUs - leftTarget) > 0.5f) || (abs(_currentRightUs - rightTarget) > 0.5f);
-    if (moving) {
-        digitalWrite(21, HIGH); // Red ON
-        digitalWrite(22, LOW);  // Blue OFF
-    } else {
-        digitalWrite(21, LOW);  // Red OFF
-        digitalWrite(22, HIGH); // Blue ON
-    }
-
     writeMicros(_leftServoPin, (uint32_t)_currentLeftUs);
     writeMicros(_rightServoPin, (uint32_t)_currentRightUs);
+}
+
+bool PwmController::isServoMoving(bool isActive, uint16_t minUs, uint16_t maxUs, bool invertLeft, bool invertRight) {
+    float leftTarget = (float)(invertLeft ? (isActive ? minUs : maxUs) : (isActive ? maxUs : minUs));
+    float rightTarget = (float)(invertRight ? (isActive ? minUs : maxUs) : (isActive ? maxUs : minUs));
+
+    return (abs(_currentLeftUs - leftTarget) > 1.0f) || (abs(_currentRightUs - rightTarget) > 1.0f);
 }
 
 void PwmController::updatePwmOutputs(bool isMosfetActive, bool isExtraActive, uint8_t mosfetOffLevel) {
