@@ -1,6 +1,7 @@
 /*
  * CRSF LoRa Receiver & Outputs Controller for ESP32 (Dev Module)
  * - Receives channel broadcast from Transmitter via SX127x LoRa Module.
+ * - Converts raw CRSF channels (172 - 1811) to standard PWM microseconds (988 - 2012 us).
  * - Controls 2 synchronous servos (Left on GPIO 4, Right on GPIO 13) with Left and Right software inversions.
  * - Monitors 3 Limit Switches:
  *   1. Upper (GPIO 32) using INPUT_PULLUP.
@@ -172,7 +173,9 @@ void loop() {
         if (len == sizeof(LoraPacket) && tempPacket.signature == 0x55AA) {
             packetCount++;
             for (int i = 0; i < 16; i++) {
-                channels[i] = tempPacket.channels[i];
+                // Convert raw CRSF value (172 - 1811) to standard PWM microseconds (approx 988 - 2012 us)
+                uint16_t rawCrsf = tempPacket.channels[i];
+                channels[i] = ((int32_t)rawCrsf - 992) * 5 / 8 + 1500;
             }
         }
         lora.startReceive();
