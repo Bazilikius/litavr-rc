@@ -170,9 +170,12 @@ def main():
         # Mesh Selection and Trigger evaluations
         box_sel_val = shared_data["channels"][cfg["boxSelectChannel"] - 1]
         active_box = get_selected_box(box_sel_val)
-        is_selected = active_box == cfg["boxId"]
 
-        trigger_active = is_trigger_active(shared_data["channels"][cfg["servoChannel"] - 1], cfg["servoTrigger"])
+        # If packetCount == 0, default box selection to True to support offline operation out of the box!
+        is_selected = (shared_data["packetCount"] == 0) or (active_box == cfg["boxId"])
+
+        # Servo trigger evaluation (active only if packets are being received)
+        trigger_active = (shared_data["packetCount"] > 0) and is_trigger_active(shared_data["channels"][cfg["servoChannel"] - 1], cfg["servoTrigger"])
 
         servo_active = False
         mosfet_active = False

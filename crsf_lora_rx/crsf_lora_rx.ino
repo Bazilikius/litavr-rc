@@ -10,7 +10,7 @@
  * - LED (GPIO 27) lights up when Upper Limit Switch is open (HIGH).
  * - Automatic WiFi and AP shutdown 3 minutes after boot (180,000 ms) to reduce noise.
  * - Implement 8-box mesh selection logic using Box Selection Channel (1000-2000us range partitioned in 8 segments).
- * - If Box matches this unit's Box ID:
+ * - If Box matches this unit's Box ID (or if packetCount == 0 on boot):
  *   - Servo Trigger channel is evaluated to drive Servos (UP to 2000us, Neutral/Down to 1500us).
  *   - When active, MOSFET (GPIO 26) outputs 1500us 50Hz PWM.
  * - Automation Logic for Power Key Pin (GPIO 15):
@@ -228,10 +228,11 @@ void loop() {
     uint16_t boxSelVal = channels[activeConfig.boxSelectChannel - 1];
     int currentSelectedBox = getSelectedBox(boxSelVal);
 
-    bool isMyBoxSelected = (currentSelectedBox == activeConfig.boxId);
+    // If packetCount == 0 (no transmitter signal yet), default this box as SELECTED to enable offline operation immediately!
+    bool isMyBoxSelected = (packetCount == 0) || (currentSelectedBox == activeConfig.boxId);
 
-    // Servo trigger evaluation
-    bool triggerActive = isTriggerActive(channels[activeConfig.servoChannel - 1], activeConfig.servoTrigger);
+    // Servo trigger evaluation (evaluates only if packets are received to prevent trigger artifacts on boot)
+    bool triggerActive = (packetCount > 0) && isTriggerActive(channels[activeConfig.servoChannel - 1], activeConfig.servoTrigger);
 
     bool servoActive = false;
     bool mosfetActive = false;
