@@ -1,7 +1,7 @@
 #include "WebServerHandler.h"
 
-WebServerHandler::WebServerHandler(ConfigManager &configManager, uint32_t &packetCount, uint16_t *channels, bool &upperSw, bool &lowerSw, bool &servoUpSw, bool &overrideActive, uint32_t &loweredTimestamp)
-    : _configManager(configManager), _packetCount(packetCount), _channels(channels), _upperSw(upperSw), _lowerSw(lowerSw), _servoUpSw(servoUpSw), _overrideActive(overrideActive), _loweredTimestamp(loweredTimestamp), _server(80) {}
+WebServerHandler::WebServerHandler(ConfigManager &configManager, uint32_t &packetCount, uint16_t *channels, bool &upperSw, bool &lowerSw, bool &overrideActive)
+    : _configManager(configManager), _packetCount(packetCount), _channels(channels), _upperSw(upperSw), _lowerSw(lowerSw), _overrideActive(overrideActive), _server(80) {}
 
 void WebServerHandler::begin() {
     // Start AP Mode
@@ -57,6 +57,28 @@ void WebServerHandler::_handleRoot() {
     html += "hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }";
     html += "</style>";
     html += "<script>";
+    html += "function syncChannels() {";
+    html += "  const allOne = document.getElementById('all_one').checked;";
+    html += "  const srvChan = document.getElementById('srv_chan').value;";
+    html += "  ";
+    html += "  const boxSelCh = document.getElementById('box_sel_ch');";
+    html += "  ";
+    html += "  if (allOne) {";
+    html += "    boxSelCh.value = srvChan; boxSelCh.disabled = true;";
+    html += "  } else {";
+    html += "    boxSelCh.disabled = false;";
+    html += "  }";
+    html += "}";
+    html += "";
+    html += "function getSelectedBox(pw) {";
+    html += "  if(pw < 1000) pw = 1000;";
+    html += "  if(pw > 2000) pw = 2000;";
+    html += "  let box = Math.floor((pw - 1000) / 125) + 1;";
+    html += "  if(box < 1) box = 1;";
+    html += "  if(box > 8) box = 8;";
+    html += "  return box;";
+    html += "}";
+    html += "";
     html += "function updateStatus() {";
     html += "  fetch('/status').then(r => r.json()).then(data => {";
     html += "    document.getElementById('packetCount').innerText = data.packets;";
@@ -66,13 +88,31 @@ void WebServerHandler::_handleRoot() {
     html += "    } else {";
     html += "      link.innerText = 'NO DATA'; link.className = 'status-indicator';";
     html += "    }";
-    html += "    document.getElementById('upperSw').innerText = data.upperSw ? 'АКТИВНИЙ / triggered' : 'CLOSED / OK';";
+    html += "    document.getElementById('upperSw').innerText = data.upperSw ? 'ВІДКРИТИЙ / Triggered' : 'CLOSED / OK';";
     html += "    document.getElementById('upperSw').className = data.upperSw ? 'status-indicator' : 'status-indicator status-ok';";
-    html += "    document.getElementById('lowerSw').innerText = data.lowerSw ? 'АКТИВНИЙ / triggered' : 'CLOSED / OK';";
+    html += "    document.getElementById('lowerSw').innerText = data.lowerSw ? 'ВІДКРИТИЙ / Triggered' : 'CLOSED / OK';";
     html += "    document.getElementById('lowerSw').className = data.lowerSw ? 'status-indicator' : 'status-indicator status-ok';";
-    html += "    document.getElementById('servoUpSw').innerText = data.servoUpSw ? 'АКТИВНИЙ / triggered (Servos UP)' : 'CLOSED / OK';";
-    html += "    document.getElementById('servoUpSw').className = data.servoUpSw ? 'status-indicator' : 'status-indicator status-ok';";
-    html += "    document.getElementById('countdown').innerText = data.countdown;";
+    html += "    ";
+    html += "    const selChIdx = parseInt(document.getElementById('box_sel_ch').value) - 1;";
+    html += "    const selChVal = data.channels[selChIdx];";
+    html += "    const selBox = getSelectedBox(selChVal);";
+    html += "    const myBoxId = " + String(config.boxId) + ";";
+    html += "    ";
+    html += "    document.getElementById('activeBox').innerText = selBox + ' (CH' + (selChIdx + 1) + ': ' + selChVal + 'us)';";
+    html += "    ";
+    html += "    const myBoxStatus = document.getElementById('myBoxStatus');";
+    html += "    if (selBox === myBoxId) {";
+    html += "      myBoxStatus.innerText = 'ВИБРАНО ЦЕЙ МОДУЛЬ (АКТИВНИЙ)'; myBoxStatus.className = 'status-indicator status-ok';";
+    html += "    } else {";
+    html += "      myBoxStatus.innerText = 'НЕ ВИБРАНО'; myBoxStatus.className = 'status-indicator';";
+    html += "    }";
+    html += "    ";
+    html += "    const ovr = document.getElementById('overrideAlert');";
+    html += "    if (data.override) {";
+    html += "      ovr.innerText = 'УВАГА: Кінцевик відкритий! MOSFET та Extra Pin вимкнено!'; ovr.style.color = 'red';";
+    html += "    } else {";
+    html += "      ovr.innerText = 'Усі кінцевики в нормі (Безпечно)'; ovr.style.color = 'green';";
+    html += "    }";
     html += "    for(let i=0; i<16; i++) {";
     html += "      const cell = document.getElementById('ch' + i);";
     html += "      if(cell) cell.innerText = 'CH' + (i+1) + ': ' + data.channels[i];";
@@ -80,23 +120,26 @@ void WebServerHandler::_handleRoot() {
     html += "  });";
     html += "}";
     html += "window.onload = function() {";
+    html += "  syncChannels();";
     html += "  setInterval(updateStatus, 1000);";
     html += "};";
     html += "</script>";
     html += "</head><body>";
 
     html += "<div class='container'>";
-    html += "<h1>Конфігурація CRSF LoRa RX</h1>";
+    html += "<h1>Конфігурація CRSF LoRa RX (Mesh 4)</h1>";
 
-    // Live monitor
+    // Live status panel
     html += "<div class='panel'>";
     html += "<h3>Монітор стану</h3>";
     html += "<p>Стан зв'язку LoRa: <span id='linkStatus' class='status-indicator'>ОЧІКУВАННЯ...</span></p>";
     html += "<p>Отримано пакетів: <span id='packetCount'>0</span></p>";
+    html += "<p>Номер нашого модуля (Box ID): <strong>" + String(config.boxId) + "</strong></p>";
+    html += "<p>Зараз вибрано модуль: <span id='activeBox' style='font-weight: bold;'>-</span></p>";
+    html += "<p>Статус нашого модуля: <span id='myBoxStatus' class='status-indicator'>-</span></p>";
     html += "<p>Верхній кінцевик (GPIO 32): <span id='upperSw' class='status-indicator'>-</span></p>";
     html += "<p>Нижній кінцевик (GPIO 33): <span id='lowerSw' class='status-indicator'>-</span></p>";
-    html += "<p>Кінцевик Servo UP (GPIO 25): <span id='servoUpSw' class='status-indicator'>-</span></p>";
-    html += "<p>Час до активації ключа (GPIO 15): <span id='countdown' style='font-weight: bold;'>-</span> сек</p>";
+    html += "<p id='overrideAlert' style='font-weight: bold; margin-top: 10px;'>Очікування даних...</p>";
     html += "<strong>Значення каналів:</strong>";
     html += "<div class='grid'>";
     for (int i = 0; i < 16; i++) {
@@ -106,12 +149,40 @@ void WebServerHandler::_handleRoot() {
     html += "</div>";
 
     // Form
-    html += "<form action='/save' method='POST'>";
+    html += "<form action='/save' method='POST' onsubmit='document.getElementById(\"box_sel_ch\").disabled=false;'>";
 
-    // 1. Servos Config
-    html += "<h3>1. Налаштування Сервоприводів (GPIO 4, GPIO 13)</h3>";
-    html += "<label for='srv_chan'>Канал CRSF:</label>";
-    html += "<select name='srv_chan' id='srv_chan'>";
+    // Checkbox: "Все одним каналом"
+    html += "<label class='checkbox-label'>";
+    String checkedAllOne = config.allOneChannel ? "checked" : "";
+    html += "<input type='checkbox' name='all_one' value='1' id='all_one' onchange='syncChannels()' " + checkedAllOne + "> Все одним каналом (копіює канал сервоприводу на вибір ящика)";
+    html += "</label>";
+
+    html += "<hr>";
+
+    // 1. Box Selector ID (1-8)
+    html += "<h3>1. Налаштування Модуля (Box ID)</h3>";
+    html += "<label for='box_id'>Номер цього ящика (1-8):</label>";
+    html += "<select name='box_id' id='box_id'>";
+    for (int i = 1; i <= 8; i++) {
+        String selected = (config.boxId == i) ? "selected" : "";
+        html += "<option value='" + String(i) + "' " + selected + ">Ящик №" + String(i) + "</option>";
+    }
+    html += "</select>";
+
+    html += "<label for='box_sel_ch'>Канал вибору ящиків (1-16):</label>";
+    html += "<select name='box_sel_ch' id='box_sel_ch'>";
+    for (int i = 1; i <= 16; i++) {
+        String selected = (config.boxSelectChannel == i) ? "selected" : "";
+        html += "<option value='" + String(i) + "' " + selected + ">CH " + String(i) + "</option>";
+    }
+    html += "</select>";
+
+    html += "<hr>";
+
+    // 2. Servos Config
+    html += "<h3>2. Налаштування Сервоприводів (GPIO 4, GPIO 13)</h3>";
+    html += "<label for='srv_chan'>Канал CRSF (Керування):</label>";
+    html += "<select name='srv_chan' id='srv_chan' onchange='syncChannels()'>";
     for (int i = 1; i <= 16; i++) {
         String selected = (config.servoChannel == i) ? "selected" : "";
         html += "<option value='" + String(i) + "' " + selected + ">CH " + String(i) + "</option>";
@@ -133,8 +204,8 @@ void WebServerHandler::_handleRoot() {
     html += "</label>";
 
     html += "<label class='checkbox-label'>";
-    String checkedInv = config.servoInvertRight ? "checked" : "";
-    html += "<input type='checkbox' name='srv_inv' value='1' id='srv_inv' " + checkedInv + "> Інвертувати правий сервопривід (GPIO 13)";
+    String checkedInvR = config.servoInvertRight ? "checked" : "";
+    html += "<input type='checkbox' name='srv_inv' value='1' id='srv_inv' " + checkedInvR + "> Інвертувати правий сервопривід (GPIO 13)";
     html += "</label>";
 
     html += "<div class='row'>";
@@ -144,62 +215,20 @@ void WebServerHandler::_handleRoot() {
 
     html += "<hr>";
 
-    // 2. Limit Switch Polarity Settings
-    html += "<h3>2. Налаштування Кінцевих Вимикачів</h3>";
-    html += "<p style='font-size: 14px; color: #666; margin-bottom: 15px;'>Тут ви можете налаштувати активний рівень (відкритий чи закритий контакт при спрацюванні) для кожного з 3 кінцевиків:</p>";
-
-    html += "<label for='up_pol'>Верхній кінцевик (GPIO 32):</label>";
-    html += "<select name='up_pol' id='up_pol'>";
-    String upSel0 = (config.upperSwPolarity == 0) ? "selected" : "";
-    String upSel1 = (config.upperSwPolarity == 1) ? "selected" : "";
-    html += "<option value='0' " + upSel0 + ">Нормально закритий (LOW / Triggered when closed to GND)</option>";
-    html += "<option value='1' " + upSel1 + ">Нормально відкритий (HIGH / Triggered when open/disconnected)</option>";
-    html += "</select>";
-
-    html += "<label for='lo_pol'>Нижній кінцевик (GPIO 33):</label>";
-    html += "<select name='lo_pol' id='lo_pol'>";
-    String loSel0 = (config.lowerSwPolarity == 0) ? "selected" : "";
-    String loSel1 = (config.lowerSwPolarity == 1) ? "selected" : "";
-    html += "<option value='0' " + loSel0 + ">Нормально закритий (LOW / Triggered when closed to GND)</option>";
-    html += "<option value='1' " + loSel1 + ">Нормально відкритий (HIGH / Triggered when open/disconnected)</option>";
-    html += "</select>";
-
-    html += "<label for='sv_pol'>Кінцевик Servo UP (GPIO 25):</label>";
-    html += "<select name='sv_pol' id='sv_pol'>";
-    String svSel0 = (config.servoUpSwPolarity == 0) ? "selected" : "";
-    String svSel1 = (config.servoUpSwPolarity == 1) ? "selected" : "";
-    html += "<option value='0' " + svSel0 + ">Нормально закритий (LOW / Triggered when closed to GND)</option>";
-    html += "<option value='1' " + svSel1 + ">Нормально відкритий (HIGH / Triggered when open/disconnected)</option>";
+    // 3. Signal Level Settings
+    html += "<h3>3. Сигнал вимкнення виходу (Полярність)</h3>";
+    html += "<label for='mos_off'>Який сигнал відправляти на вихід при вимкненні (MOSFET/GPIO 26 та Extra/GPIO 15):</label>";
+    html += "<select name='mos_off' id='mos_off'>";
+    String mosOffSel0 = (config.mosfetOffLevel == 0) ? "selected" : "";
+    String mosOffSel1 = (config.mosfetOffLevel == 1) ? "selected" : "";
+    html += "<option value='0' " + mosOffSel0 + ">LOW / 1000us PWM (Вимкнено = 1000us, Активовано = 1500us/2000us)</option>";
+    html += "<option value='1' " + mosOffSel1 + ">HIGH / 2000us PWM (Вимкнено = 2000us, Активовано = 1500us/2000us)</option>";
     html += "</select>";
 
     html += "<hr>";
 
-    // 3. Output polarities
-    html += "<h3>3. Налаштування Полярності Виходів (MOSFET / Ключів)</h3>";
-    html += "<p style='font-size: 14px; color: #666; margin-bottom: 15px;'>Вкажіть полярність вихідних сигналів для узгодження з вашим залізом (MOSFET / реле):</p>";
-
-    html += "<label for='p_key_off'>Ключ Живлення (GPIO 15) рівень вимкнення:</label>";
-    html += "<select name='p_key_off' id='p_key_off'>";
-    String pKeyOff0 = (config.powerKeyOffLevel == 0) ? "selected" : "";
-    String pKeyOff1 = (config.powerKeyOffLevel == 1) ? "selected" : "";
-    html += "<option value='0' " + pKeyOff0 + ">LOW (Вимкнено = 0V, Активовано = 3.3V)</option>";
-    html += "<option value='1' " + pKeyOff1 + ">HIGH (Вимкнено = 3.3V, Активовано = 0V)</option>";
-    html += "</select>";
-
-    html += "<label for='ex_pin_off'>Extra Pin (GPIO 26) рівень вимкнення:</label>";
-    html += "<select name='ex_pin_off' id='ex_pin_off'>";
-    String exPinOff0 = (config.extraPinOffLevel == 0) ? "selected" : "";
-    String exPinOff1 = (config.extraPinOffLevel == 1) ? "selected" : "";
-    html += "<option value='0' " + exPinOff0 + ">LOW (Вимкнено = 0V, Активовано = 3.3V)</option>";
-    html += "<option value='1' " + exPinOff1 + ">HIGH (Вимкнено = 3.3V, Активовано = 0V)</option>";
-    html += "</select>";
-
-    html += "<hr>";
-
-    // 4. Global settings
+    // 4. System Config
     html += "<h3>4. Системні налаштування</h3>";
-    html += "<p style='font-size: 14px; color: #666; margin-bottom: 15px;'>Для активації вихідного ключа живлення (GPIO 15) після 60 секунд затримки, усі три кінцевики мають перебувати в безпечному (Closed/OK) стані.</p>";
-
     html += "<label for='lora_freq'>Частота LoRa (Hz):</label>";
     html += "<input type='number' name='lora_freq' id='lora_freq' value='" + String(config.loraFreq) + "' min='100000000' max='1000000000'>";
 
@@ -213,13 +242,13 @@ void WebServerHandler::_handleRoot() {
 }
 
 void WebServerHandler::_handleSave() {
-    if (_server.hasArg("srv_chan") && _server.hasArg("srv_trig") &&
+    if (_server.hasArg("box_id") && _server.hasArg("box_sel_ch") &&
+        _server.hasArg("srv_chan") && _server.hasArg("srv_trig") &&
         _server.hasArg("srv_min") && _server.hasArg("srv_max") &&
-        _server.hasArg("up_pol") && _server.hasArg("lo_pol") &&
-        _server.hasArg("sv_pol") && _server.hasArg("p_key_off") &&
-        _server.hasArg("ex_pin_off") && _server.hasArg("lora_freq")) {
+        _server.hasArg("mos_off") && _server.hasArg("lora_freq")) {
 
         RxConfig newConfig;
+        newConfig.boxId = _server.arg("box_id").toInt();
         newConfig.servoChannel = _server.arg("srv_chan").toInt();
         newConfig.servoTrigger = _server.arg("srv_trig").toInt();
         newConfig.servoInvertLeft = _server.hasArg("srv_inv_l") ? 1 : 0;
@@ -228,12 +257,15 @@ void WebServerHandler::_handleSave() {
         newConfig.servoMax = _server.arg("srv_max").toInt();
         newConfig.loraFreq = _server.arg("lora_freq").toInt();
 
-        newConfig.upperSwPolarity = _server.arg("up_pol").toInt();
-        newConfig.lowerSwPolarity = _server.arg("lo_pol").toInt();
-        newConfig.servoUpSwPolarity = _server.arg("sv_pol").toInt();
+        newConfig.allOneChannel = _server.hasArg("all_one") ? 1 : 0;
 
-        newConfig.powerKeyOffLevel = _server.arg("p_key_off").toInt();
-        newConfig.extraPinOffLevel = _server.arg("ex_pin_off").toInt();
+        if (!newConfig.allOneChannel) {
+            newConfig.boxSelectChannel = _server.arg("box_sel_ch").toInt();
+        } else {
+            newConfig.boxSelectChannel = newConfig.servoChannel;
+        }
+
+        newConfig.mosfetOffLevel = _server.arg("mos_off").toInt();
 
         _configManager.saveConfig(newConfig);
 
@@ -262,19 +294,11 @@ void WebServerHandler::_handleSave() {
 }
 
 void WebServerHandler::_handleStatus() {
-    uint32_t remaining = 60;
-    if (_loweredTimestamp != 0) {
-        uint32_t elapsed = (millis() - _loweredTimestamp) / 1000;
-        remaining = (elapsed < 60) ? (60 - elapsed) : 0;
-    }
-
     String json = "{";
     json += "\"packets\":" + String(_packetCount) + ",";
     json += "\"upperSw\":" + String(_upperSw ? 1 : 0) + ",";
     json += "\"lowerSw\":" + String(_lowerSw ? 1 : 0) + ",";
-    json += "\"servoUpSw\":" + String(_servoUpSw ? 1 : 0) + ",";
     json += "\"override\":" + String(_overrideActive ? 1 : 0) + ",";
-    json += "\"countdown\":" + String(remaining) + ",";
     json += "\"channels\":[";
     for (int i = 0; i < 16; i++) {
         json += String(_channels[i]);
