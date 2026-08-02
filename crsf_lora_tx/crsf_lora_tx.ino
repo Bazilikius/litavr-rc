@@ -3,9 +3,8 @@
  * - Listens to CRSF stream on Serial2 (RX Pin 16, TX Pin 17 is unused).
  * - Packs 16 channels and broadcasts them over SX127x LoRa Module.
  * - Restricts WiFi TX Power to 25% for high efficiency and compliance.
- * - LORA_DIO0 moved to GPIO 17 (or another safe GPIO) to prevent ESP32 strapping pin flashing block and boot freeze.
- *   On standard Dev Modules, Serial2 RX is GPIO 16, so let's use GPIO 21 or another free GPIO (e.g., GPIO 22 or 17).
- *   Let's check: DIO0 SPI interrupt can use GPIO 22.
+ * - LORA_DIO0 moved to GPIO 34 (from GPIO 22/2) to prevent ESP32 memory bus or strapping pin conflicts.
+ *   GPIO 34 is a safe input-only pin on ESP32, which guarantees zero startup boot conflicts or flash failures!
  */
 
 #include <Arduino.h>
@@ -19,10 +18,10 @@
 #define CRSF_RX_PIN 16
 #define CRSF_TX_PIN -1
 
-// SX127x SPI Pins on ESP32 (DIO0 moved to GPIO 22 to avoid strapping conflict on GPIO 2)
+// SX127x SPI Pins on ESP32 (DIO0 moved to GPIO 34 to avoid conflicts)
 #define LORA_SS    5
 #define LORA_RST   14
-#define LORA_DIO0  22
+#define LORA_DIO0  34
 #define LORA_SCK   18
 #define LORA_MISO  19
 #define LORA_MOSI  23
