@@ -1,7 +1,7 @@
 #include "WebServerHandler.h"
 
-WebServerHandler::WebServerHandler(ConfigManager &configManager, uint32_t &packetCount, uint16_t *channels, bool &upperSw, bool &lowerSw, bool &overrideActive)
-    : _configManager(configManager), _packetCount(packetCount), _channels(channels), _upperSw(upperSw), _lowerSw(lowerSw), _overrideActive(overrideActive), _server(80) {}
+WebServerHandler::WebServerHandler(ConfigManager &configManager, uint32_t &packetCount, uint16_t *channels, bool &upperSw, bool &lowerSw, bool &overrideActive, uint32_t &loweredTimestamp)
+    : _configManager(configManager), _packetCount(packetCount), _channels(channels), _upperSw(upperSw), _lowerSw(lowerSw), _overrideActive(overrideActive), _loweredTimestamp(loweredTimestamp), _server(80) {}
 
 void WebServerHandler::begin() {
     // Start AP Mode
@@ -107,6 +107,8 @@ void WebServerHandler::_handleRoot() {
     html += "      myBoxStatus.innerText = 'НЕ ВИБРАНО'; myBoxStatus.className = 'status-indicator';";
     html += "    }";
     html += "    ";
+    html += "    document.getElementById('countdown').innerText = data.countdown;";
+    html += "    ";
     html += "    const ovr = document.getElementById('overrideAlert');";
     html += "    if (data.override) {";
     html += "      ovr.innerText = 'УВАГА: Кінцевик відкритий! MOSFET та Extra Pin вимкнено!'; ovr.style.color = 'red';";
@@ -139,6 +141,7 @@ void WebServerHandler::_handleRoot() {
     html += "<p>Статус нашого модуля: <span id='myBoxStatus' class='status-indicator'>-</span></p>";
     html += "<p>Верхній кінцевик (GPIO 32): <span id='upperSw' class='status-indicator'>-</span></p>";
     html += "<p>Нижній кінцевик (GPIO 33): <span id='lowerSw' class='status-indicator'>-</span></p>";
+    html += "<p>Час до автоматичної активації Power Key (GPIO 15): <span id='countdown' style='font-weight: bold;'>-</span> сек</p>";
     html += "<p id='overrideAlert' style='font-weight: bold; margin-top: 10px;'>Очікування даних...</p>";
     html += "<strong>Значення каналів:</strong>";
     html += "<div class='grid'>";
@@ -213,6 +216,9 @@ void WebServerHandler::_handleRoot() {
     html += "  <div><label>Max PWM (us):</label><input type='number' name='srv_max' value='" + String(config.servoMax) + "' min='500' max='2500'></div>";
     html += "</div>";
 
+    html += "<label for='srv_spd'>Швидкість руху сервоприводів (us/сек):</label>";
+    html += "<input type='number' name='srv_spd' id='srv_spd' value='" + String(config.servoSpeed) + "' min='5' max='5000'>";
+
     html += "<hr>";
 
     // 3. Signal Level Settings
@@ -245,7 +251,8 @@ void WebServerHandler::_handleSave() {
     if (_server.hasArg("box_id") && _server.hasArg("box_sel_ch") &&
         _server.hasArg("srv_chan") && _server.hasArg("srv_trig") &&
         _server.hasArg("srv_min") && _server.hasArg("srv_max") &&
-        _server.hasArg("mos_off") && _server.hasArg("lora_freq")) {
+        _server.hasArg("srv_spd") && _server.hasArg("mos_off") &&
+        _server.hasArg("lora_freq")) {
 
         RxConfig newConfig;
         newConfig.boxId = _server.arg("box_id").toInt();
@@ -255,6 +262,7 @@ void WebServerHandler::_handleSave() {
         newConfig.servoInvertRight = _server.hasArg("srv_inv") ? 1 : 0;
         newConfig.servoMin = _server.arg("srv_min").toInt();
         newConfig.servoMax = _server.arg("srv_max").toInt();
+        newConfig.servoSpeed = _server.arg("srv_spd").toInt();
         newConfig.loraFreq = _server.arg("lora_freq").toInt();
 
         newConfig.allOneChannel = _server.hasArg("all_one") ? 1 : 0;
@@ -294,11 +302,18 @@ void WebServerHandler::_handleSave() {
 }
 
 void WebServerHandler::_handleStatus() {
+    uint32_t remaining = 60;
+    if (_loweredTimestamp != 0) {
+        uint32_t elapsed = (millis() - _loweredTimestamp) / 1000;
+        remaining = (elapsed < 60) ? (60 - elapsed) : 0;
+    }
+
     String json = "{";
     json += "\"packets\":" + String(_packetCount) + ",";
     json += "\"upperSw\":" + String(_upperSw ? 1 : 0) + ",";
     json += "\"lowerSw\":" + String(_lowerSw ? 1 : 0) + ",";
     json += "\"override\":" + String(_overrideActive ? 1 : 0) + ",";
+    json += "\"countdown\":" + String(remaining) + ",";
     json += "\"channels\":[";
     for (int i = 0; i < 16; i++) {
         json += String(_channels[i]);

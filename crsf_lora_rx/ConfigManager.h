@@ -13,6 +13,7 @@ struct RxConfig {
     uint8_t servoInvertRight;  // 0 or 1, default 0
     uint16_t servoMin;         // 500-2500 us, default 1500
     uint16_t servoMax;         // 500-2500 us, default 2000
+    uint16_t servoSpeed;       // us per second, default 100
     uint32_t loraFreq;         // e.g. 433000000
 
     uint8_t allOneChannel;     // 0 or 1, default 0

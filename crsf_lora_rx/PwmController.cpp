@@ -28,7 +28,7 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     pinMode(_upperSwPin, INPUT_PULLUP);
     pinMode(_lowerSwPin, INPUT_PULLUP);
 
-    // Setup LEDC PWM on ESP32 for Servos (Left Servo on GPIO 4, Right Servo on GPIO 13) and RC Switch Outputs (GPIO 15 and GPIO 26)
+    // Setup LEDC PWM on ESP32 for Servos (Left Servo on GPIO 4, Right Servo on GPIO 13) and RC Switch Outputs (GPIO 26 and GPIO 15)
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
     // Arduino ESP32 Core 3.x APIs
     ledcAttach(_leftServoPin, PWM_FREQ, PWM_RES);
@@ -66,10 +66,9 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
 
     _lastUpdateMs = millis();
 
-    // Startup test sequence: sweep servos slowly and synchronously to verify hardware (1500us -> 1600us -> 1500us)
+    // Startup test sequence: sweep servos slowly and synchronously to verify hardware
     Serial.println("[PWM] Running synchronized boot-up diagnostics sweep...");
 
-    // Fast sweep for boot diagnostics
     _currentLeftUs = 1500.0f;
     _currentRightUs = 1500.0f;
     writeMicros(_leftServoPin, 1500);
@@ -88,7 +87,7 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     Serial.println("[PWM] Diagnostics complete. Outputs Ready.");
 }
 
-void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, bool invertLeft, bool invertRight) {
+void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, bool invertLeft, bool invertRight, uint16_t speedUsPerSec) {
     // Inversion of both servos implemented in exactly two lines of code:
     float leftTarget = (float)(invertLeft ? (isActive ? minUs : maxUs) : (isActive ? maxUs : minUs));
     float rightTarget = (float)(invertRight ? (isActive ? minUs : maxUs) : (isActive ? maxUs : minUs));
@@ -109,9 +108,8 @@ void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, 
     if (elapsed > 0) {
         _lastUpdateMs = now;
 
-        // --- Slow Slew-Rate Limiter (Constant speed in both directions) ---
-        // Speed: 250us per 60 seconds (60,000 milliseconds) -> 0.0041666f us/ms
-        float maxStep = (float)elapsed * 0.0041666f;
+        // Custom slew-rate step based on speedUsPerSec (us per millisecond)
+        float maxStep = (float)elapsed * ((float)speedUsPerSec / 1000.0f);
 
         // Smoothly adjust Left Servo
         if (_currentLeftUs < leftTarget) {

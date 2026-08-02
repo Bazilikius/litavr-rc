@@ -10,9 +10,14 @@
  * - Implement 8-box mesh selection logic using Box Selection Channel (1000-2000us range partitioned in 8 segments).
  * - If Box matches this unit's Box ID:
  *   - Servo Trigger channel is evaluated to drive Servos (UP to 2000us, Neutral/Down to 1500us).
- *   - When active, MOSFET (GPIO 26) outputs 1500us 50Hz PWM, and Extra Pin (GPIO 15) outputs 2000us 50Hz PWM.
+ *   - When active, MOSFET (GPIO 26) outputs 1500us 50Hz PWM.
+ * - Automation Logic for Power Key Pin (GPIO 15):
+ *   - Power Key (GPIO 15) turns ACTIVE (2000us 50Hz PWM) only if:
+ *     a) 60 seconds have elapsed since the servos were commanded DOWN (inactive).
+ *     b) AND simultaneously: both limit switches (Upper and Lower) are CLOSED (LOW / OK).
+ *   - If servos are active (UP), or if any limit switch is open, or if the box is not selected, GPIO 15 goes INACTIVE immediately.
  * - If any limit switch is open (HIGH):
- *   - MOSFET and Extra Pin are forced to the configured OFF level (1000us or 2000us PWM).
+ *   - MOSFET is forced to the configured OFF level (1000us or 2000us PWM).
  * - Reduced WiFi Transmit Power to 25% (WIFI_POWER_5dBm).
  */
 
@@ -27,7 +32,7 @@
 #define LEFT_SERVO_PIN  4
 #define RIGHT_SERVO_PIN 13
 #define MOSFET_PIN      26 // External MOSFET (GPIO 26)
-#define EXTRA_PIN       15 // Separate mirror pin (GPIO 15)
+#define EXTRA_PIN       15 // Power Key Pin with 60s Delay Logic (GPIO 15)
 #define LED_PIN         27 // Status Indicator LED
 #define UPPER_SW_PIN    32 // Upper Limit Switch
 #define LOWER_SW_PIN    33 // Lower Limit Switch
@@ -60,13 +65,16 @@ bool debouncedLowerSw = false; // true = pin is HIGH, false = pin is LOW
 
 const uint32_t DEBOUNCE_DELAY_MS = 50; // 50ms stable window
 
+// Timer for the 60-second power key delay
+uint32_t loweredTimestamp = 0;
+
 struct LoraPacket {
     uint16_t signature; // 0x55AA
     uint32_t packetId;
     uint16_t channels[16];
 } loraPacket;
 
-WebServerHandler webServer(configManager, packetCount, channels, upperSwOpen, lowerSwOpen, overrideActive);
+WebServerHandler webServer(configManager, packetCount, channels, upperSwOpen, lowerSwOpen, overrideActive, loweredTimestamp);
 
 uint32_t lastReport = 0;
 bool wifiShutDownDone = false;
@@ -103,6 +111,9 @@ void setup() {
     for (int i = 0; i < 16; i++) {
         channels[i] = 1500;
     }
+
+    // Start delay countdown timer immediately upon power-up
+    loweredTimestamp = millis();
 
     // Load configurations
     configManager.begin();
@@ -197,7 +208,6 @@ void loop() {
 
     bool servoActive = false;
     bool mosfetActive = false;
-    bool extraActive = false;
 
     // Safety Override: if either limit switch is open, force disabled states
     bool isAnyOpen = upperSwOpen || lowerSwOpen;
@@ -208,31 +218,44 @@ void loop() {
             servoActive = true;             // Move servos to 2000us
             if (!isAnyOpen) {
                 mosfetActive = true;        // Output 1500us PWM on MOSFET (GPIO 26)
-                extraActive = true;         // Output 2000us PWM on Extra (GPIO 15)
             }
         } else {
             servoActive = false;            // Return servos to 1500us (neutral)
             mosfetActive = false;
-            extraActive = false;
         }
     } else {
-        // Not selected
         servoActive = false;
         mosfetActive = false;
-        extraActive = false;
     }
 
-    // Update physical servos with 250us per 60 seconds slow rate limit
-    controller.updateServos(servoActive, activeConfig.servoMin, activeConfig.servoMax, activeConfig.servoInvertLeft != 0, activeConfig.servoInvertRight != 0);
+    // Update physical servos with customizable speed limit
+    controller.updateServos(servoActive, activeConfig.servoMin, activeConfig.servoMax, activeConfig.servoInvertLeft != 0, activeConfig.servoInvertRight != 0, activeConfig.servoSpeed);
 
-    // Update 50Hz LEDC PWM Outputs: GPIO 26 (MOSFET) and GPIO 15 (Extra)
+    // --- 60-Second Delay Automation Logic for GPIO 15 (Extra Pin / Power Key) ---
+    // Track when servos are in inactive/DOWN state
+    if (isMyBoxSelected && !servoActive) {
+        if (loweredTimestamp == 0) {
+            loweredTimestamp = millis();
+        }
+    } else {
+        loweredTimestamp = 0; // Reset countdown if servos move UP or module is unselected
+    }
+
+    // Power Key Pin (GPIO 15) activates (outputs 2000us PWM) ONLY if:
+    // 1. 60 seconds have elapsed since servos went inactive (DOWN).
+    // 2. AND both limit switches are closed (no override active).
+    bool elapsed60s = (loweredTimestamp != 0 && (millis() - loweredTimestamp >= 60000));
+    bool extraActive = elapsed60s && !isAnyOpen;
+
+    // Update 50Hz LEDC PWM Outputs: GPIO 26 (MOSFET) and GPIO 15 (Extra / Power Key)
     controller.updatePwmOutputs(mosfetActive, extraActive, activeConfig.mosfetOffLevel);
 
     yield();
 
     // 6. Diagnostics reporting
     if (millis() - lastReport > 5000) {
-        Serial.printf("[RX] SelectedBox:%d (MyBox:%d, Selected:%s) | UpperOpen: %s | LowerOpen: %s | Servos: %s | MOSFET: %s | Extra: %s\n",
+        uint32_t secondsDown = (loweredTimestamp != 0) ? (millis() - loweredTimestamp) / 1000 : 0;
+        Serial.printf("[RX] SelectedBox:%d (MyBox:%d, Selected:%s) | UpperOpen: %s | LowerOpen: %s | Servos: %s | MOSFET: %s | Extra (Delay %us): %s\n",
                       currentSelectedBox,
                       activeConfig.boxId,
                       isMyBoxSelected ? "YES" : "NO",
@@ -240,6 +263,7 @@ void loop() {
                       lowerSwOpen ? "YES" : "NO",
                       servoActive ? "ACTIVE (2000us)" : "NEUTRAL (1500us)",
                       mosfetActive ? "ACTIVE (1500us)" : "OFF",
+                      secondsDown,
                       extraActive ? "ACTIVE (2000us)" : "OFF");
         lastReport = millis();
     }
