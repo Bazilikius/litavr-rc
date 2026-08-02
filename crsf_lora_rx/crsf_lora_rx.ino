@@ -22,6 +22,7 @@
  * - GPIO 21 (Red LED) blinks at 500ms intervals during 60s countdown, stays ON constantly when countdown elapses, stays OFF otherwise.
  * - GPIO 22 (Blue LED) blinks at 200ms intervals when servos are moving, stays ON constantly when stationary.
  * - Reduced WiFi Transmit Power to 25% (WIFI_POWER_5dBm).
+ * - LORA_DIO0 moved to GPIO 16 (from GPIO 2) to prevent ESP32 strapping pin flashing block and boot freeze.
  */
 
 #include <Arduino.h>
@@ -41,10 +42,10 @@
 #define LOWER_SW_PIN    33 // Lower Limit Switch
 #define SERVO_UP_SW_PIN 25 // 3rd Limit Switch / Servo-UP Override
 
-// LoRa SPI Pin Configuration
+// LoRa SPI Pin Configuration (DIO0 moved to GPIO 16 to avoid strapping conflict)
 #define LORA_SS    5
 #define LORA_RST   14
-#define LORA_DIO0  2
+#define LORA_DIO0  16
 #define LORA_SCK   18
 #define LORA_MISO  19
 #define LORA_MOSI  23
