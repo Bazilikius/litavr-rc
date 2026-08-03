@@ -3,8 +3,7 @@
  * - Listens to CRSF stream on Serial2 (RX Pin 16, TX Pin 17 is unused).
  * - Packs 16 channels and broadcasts them over SX127x LoRa Module.
  * - Restricts WiFi TX Power to 25% for high efficiency and compliance.
- * - LORA_DIO0 moved to GPIO 34 (from GPIO 22/2) to prevent ESP32 memory bus or strapping pin conflicts.
- *   GPIO 34 is a safe input-only pin on ESP32, which guarantees zero startup boot conflicts or flash failures!
+ * - LORA_RST = 14, LORA_DIO0 = 2 (Restored to the 14:59 soldered hardware pinout).
  */
 
 #include <Arduino.h>
@@ -18,10 +17,10 @@
 #define CRSF_RX_PIN 16
 #define CRSF_TX_PIN -1
 
-// SX127x SPI Pins on ESP32 (DIO0 moved to GPIO 34 to avoid conflicts)
+// SX127x SPI Pins on ESP32 (Restored to 14:59 physical soldered setup)
 #define LORA_SS    5
 #define LORA_RST   14
-#define LORA_DIO0  34
+#define LORA_DIO0  2
 #define LORA_SCK   18
 #define LORA_MISO  19
 #define LORA_MOSI  23
@@ -42,8 +41,11 @@ struct LoraPacket {
 } loraPacket;
 
 void setup() {
+    // 1. Silent delay to allow external BEC/battery power rails to stabilize completely before starting up
+    delay(1000);
+
     Serial.begin(115200);
-    // Removed startup delays to guarantee instant boot-up under standalone BEC power supply!
+    delay(2000); // 2-second safe boot delay matching 14:59 code
 
     Serial.println("\n=============================================");
     Serial.println(" ESP32 CRSF to LoRa TRANSMITTER ");

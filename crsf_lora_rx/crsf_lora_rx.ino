@@ -23,7 +23,7 @@
  * - GPIO 21 (Red LED) blinks at 500ms intervals during 60s countdown, stays ON constantly when countdown elapses, stays OFF otherwise.
  * - GPIO 22 (Blue LED) blinks at 200ms intervals when servos are moving, stays ON constantly when stationary.
  * - Reduced WiFi Transmit Power to 25% (WIFI_POWER_5dBm).
- * - LORA_DIO0 moved to GPIO 34 (from GPIO 16) to avoid ESP32 flash/PSRAM memory bus interference on boot.
+ * - LORA_RST = 14, LORA_DIO0 = 2 (Restored to the 14:59 soldered hardware pinout).
  */
 
 #include <Arduino.h>
@@ -43,10 +43,10 @@
 #define LOWER_SW_PIN    33 // Lower Limit Switch
 #define SERVO_UP_SW_PIN 25 // 3rd Limit Switch / Servo-UP Override
 
-// LoRa SPI Pin Configuration (DIO0 moved to GPIO 34 to avoid flashing/boot conflict)
+// LoRa SPI Pin Configuration (Restored to 14:59 physical soldered setup)
 #define LORA_SS    5
 #define LORA_RST   14
-#define LORA_DIO0  34
+#define LORA_DIO0  2
 #define LORA_SCK   18
 #define LORA_MISO  19
 #define LORA_MOSI  23
@@ -109,7 +109,16 @@ int getSelectedBox(uint16_t pulseWidth) {
 }
 
 void setup() {
+    // 1. Silent delay to allow external BEC/battery power rails to stabilize completely before starting up
+    delay(1000);
+
+    // 2. Configure Limit Switches immediately as INPUT_PULLUP to stabilize pins early on boot
+    pinMode(UPPER_SW_PIN, INPUT_PULLUP);
+    pinMode(LOWER_SW_PIN, INPUT_PULLUP);
+    pinMode(SERVO_UP_SW_PIN, INPUT_PULLUP);
+
     Serial.begin(115200);
+    delay(2000); // 2-second safe boot delay matching 14:59 code
 
     Serial.println("\n=============================================");
     Serial.println(" ESP32 CRSF LoRa RX OUTPUT CONTROLLER ");
@@ -119,11 +128,6 @@ void setup() {
     for (int i = 0; i < 16; i++) {
         channels[i] = 1500;
     }
-
-    // Configure Limit Switches early as INPUT_PULLUP to ensure accurate boot readings
-    pinMode(UPPER_SW_PIN, INPUT_PULLUP);
-    pinMode(LOWER_SW_PIN, INPUT_PULLUP);
-    pinMode(SERVO_UP_SW_PIN, INPUT_PULLUP);
 
     // Start delay countdown timer immediately upon power-up
     loweredTimestamp = millis();
