@@ -3,10 +3,10 @@
  * - Receives channel broadcast from Transmitter via SX127x LoRa Module.
  * - Converts raw CRSF channels (172 - 1811) to standard PWM microseconds (988 - 2012 us).
  * - Controls 2 synchronous servos (Left on GPIO 4, Right on GPIO 13) with Left and Right software inversions.
- * - Monitors 3 Limit Switches:
+ * - Monitors up to 3 Limit Switches:
  *   1. Upper (GPIO 32) using INPUT_PULLUP.
  *   2. Lower (GPIO 33) using INPUT_PULLUP.
- *   3. Servo-UP Switch (GPIO 25) using INPUT_PULLUP.
+ *   3. Servo-UP Switch (GPIO 25) using INPUT_PULLUP (optional, enabled via useThreeSwitches).
  * - LED (GPIO 27) lights up when Upper Limit Switch is open (HIGH).
  * - Automatic WiFi and AP shutdown 3 minutes after boot (180,000 ms) to reduce noise.
  * - Implement 8-box mesh selection logic using Box Selection Channel (1000-2000us range partitioned in 8 segments).
@@ -16,10 +16,10 @@
  * - Automation Logic for Power Key Pin (GPIO 15):
  *   - Power Key (GPIO 15) turns ACTIVE (2000us 50Hz PWM) only if:
  *     a) 60 seconds have elapsed since the servos were commanded DOWN (inactive).
- *     b) AND simultaneously: all three limit switches are CLOSED (LOW / OK).
- *   - If servos are active (UP), or if any limit switch is open, or if the box is not selected, GPIO 15 goes INACTIVE immediately.
+ *     b) AND simultaneously: all active limit switches are CLOSED (LOW / OK).
+ *   - If servos are active (UP), or if any active limit switch is open, or if the box is not selected, GPIO 15 goes INACTIVE immediately.
  * - If any limit switch is open (HIGH):
- *   - MOSFET is forced to the configured OFF level (1000us or 2000us PWM).
+ *   - MOSFET is forced to its configured OFF level.
  * - GPIO 21 (Red LED) blinks at 500ms intervals during 60s countdown, stays ON constantly when countdown elapses, stays OFF otherwise.
  * - GPIO 22 (Blue LED) blinks at 200ms intervals when servos are moving, stays ON constantly when stationary.
  * - Reduced WiFi Transmit Power to 25% (WIFI_POWER_5dBm).
@@ -110,7 +110,6 @@ int getSelectedBox(uint16_t pulseWidth) {
 
 void setup() {
     Serial.begin(115200);
-    delay(2000);
 
     Serial.println("\n=============================================");
     Serial.println(" ESP32 CRSF LoRa RX OUTPUT CONTROLLER ");
@@ -237,13 +236,19 @@ void loop() {
     bool servoActive = false;
     bool mosfetActive = false;
 
-    // Safety Override: if ANY of the three limit switches is open, force disabled states
-    bool isAnyOpen = upperSwOpen || lowerSwOpen || servoUpSwOpen;
+    // Safety Override: Evaluate based on configured limit switches (2 or 3 switches)
+    bool isAnyOpen = false;
+    if (activeConfig.useThreeSwitches == 1) {
+        isAnyOpen = upperSwOpen || lowerSwOpen || servoUpSwOpen;
+    } else {
+        isAnyOpen = upperSwOpen || lowerSwOpen; // Default: Ignore optional GPIO 25 limit switch
+    }
     overrideActive = isAnyOpen;
 
     if (isMyBoxSelected) {
-        if (triggerActive || servoUpSwOpen) {
-            servoActive = true;             // Move servos UP (override UP if GPIO 25 is open)
+        bool upCmd = triggerActive || (activeConfig.useThreeSwitches == 1 && servoUpSwOpen);
+        if (upCmd) {
+            servoActive = true;             // Move servos UP
             if (!isAnyOpen) {
                 mosfetActive = true;        // Output 1500us PWM on MOSFET (GPIO 26)
             }
@@ -260,9 +265,9 @@ void loop() {
     controller.updateServos(servoActive, activeConfig.servoMin, activeConfig.servoMax, activeConfig.servoInvertLeft != 0, activeConfig.servoInvertRight != 0, activeConfig.servoSpeed);
 
     // --- 60-Second Delay Automation Logic for GPIO 15 (Extra Pin / Power Key) ---
-    // Timer starts/retains ONLY when ALL THREE limit switches are CLOSED (LOW / OK) AND servos are commanded DOWN!
-    bool allThreeClosed = !isAnyOpen;
-    bool timerEnabled = isMyBoxSelected && !servoActive && allThreeClosed;
+    // Timer starts/retains ONLY when ALL active limit switches are CLOSED (LOW / OK) AND servos are commanded DOWN!
+    bool allActiveSwClosed = !isAnyOpen;
+    bool timerEnabled = isMyBoxSelected && !servoActive && allActiveSwClosed;
 
     if (timerEnabled) {
         if (loweredTimestamp == 0) {
@@ -273,21 +278,16 @@ void loop() {
     }
 
     bool elapsed60s = (loweredTimestamp != 0 && (millis() - loweredTimestamp >= 60000));
-    bool extraActive = elapsed60s && allThreeClosed;
+    bool extraActive = elapsed60s && allActiveSwClosed;
 
-    // Update 50Hz LEDC PWM Outputs: GPIO 26 (MOSFET) and GPIO 15 (Extra / Power Key)
-    controller.updatePwmOutputs(mosfetActive, extraActive, activeConfig.mosfetOffLevel);
+    // Update 50Hz LEDC PWM Outputs with independent off levels
+    controller.updatePwmOutputs(mosfetActive, extraActive, activeConfig.mosfetOffLevel, activeConfig.powerKeyOffLevel);
 
     // --- Dynamic LED Indicator logic (GPIO 21 and GPIO 22) ---
-    // GPIO 21 (Red LED) behavior:
-    // - Blinks (500ms intervals) during 60-second countdown (counting down).
-    // - ON constantly when countdown elapses (timer reached 0 and extra pin active).
-    // - OFF otherwise.
     if (loweredTimestamp != 0) {
         if (elapsed60s) {
             digitalWrite(21, HIGH); // Timer finished -> Solid Red ON
         } else {
-            // Blinking Red LED during countdown (500ms intervals)
             bool blinkState = (millis() / 500) % 2 == 0;
             digitalWrite(21, blinkState ? HIGH : LOW);
         }
@@ -295,9 +295,6 @@ void loop() {
         digitalWrite(21, LOW); // Timer not running -> Red OFF
     }
 
-    // GPIO 22 (Blue LED) behavior:
-    // - Blinks (200ms intervals) when servos are moving.
-    // - ON constantly when servos are stationary.
     bool servosMoving = controller.isServoMoving(servoActive, activeConfig.servoMin, activeConfig.servoMax, activeConfig.servoInvertLeft != 0, activeConfig.servoInvertRight != 0);
     if (servosMoving) {
         bool blinkState = (millis() / 200) % 2 == 0;

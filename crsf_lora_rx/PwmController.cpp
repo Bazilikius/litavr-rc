@@ -50,16 +50,11 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     ledcAttachPin(_mosfetPin, MOSFET_LEDC_CHAN);
 #endif
 
-    Serial.printf("[PWM] Initialized 50Hz LEDC PWM on LeftServo=%d, RightServo=%d, Extra=%d, MOSFET=%d | LED=%d, UpperSw=%d, LowerSw=%d\n",
-                  _leftServoPin, _rightServoPin, _extraPin, _mosfetPin, _ledPin, _upperSwPin, _lowerSwPin);
-
     // Set starting positions organically based on the Upper Limit Switch state at boot!
     if (isUpperTriggeredAtBoot) {
-        Serial.println("[PWM] Upper Limit Switch triggered at boot. Initializing servos in active/UP position.");
         _currentLeftUs = (float)(invertLeft ? minUs : maxUs);
         _currentRightUs = (float)(invertRight ? minUs : maxUs);
     } else {
-        Serial.println("[PWM] Upper Limit Switch not triggered. Initializing servos in inactive/DOWN position.");
         _currentLeftUs = (float)(invertLeft ? maxUs : minUs);
         _currentRightUs = (float)(invertRight ? maxUs : minUs);
     }
@@ -67,8 +62,6 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     _lastUpdateMs = millis();
 
     // Startup test sequence: sweep servos slowly and synchronously to verify hardware
-    Serial.println("[PWM] Running synchronized boot-up diagnostics sweep...");
-
     _currentLeftUs = 1500.0f;
     _currentRightUs = 1500.0f;
     writeMicros(_leftServoPin, 1500);
@@ -83,8 +76,6 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     // Initial state: stationary (Blue ON, Red OFF)
     digitalWrite(21, LOW);
     digitalWrite(22, HIGH);
-
-    Serial.println("[PWM] Diagnostics complete. Outputs Ready.");
 }
 
 void PwmController::updateServos(bool isActive, uint16_t minUs, uint16_t maxUs, bool invertLeft, bool invertRight, uint16_t speedUsPerSec) {
@@ -141,12 +132,12 @@ bool PwmController::isServoMoving(bool isActive, uint16_t minUs, uint16_t maxUs,
     return (abs(_currentLeftUs - leftTarget) > 1.0f) || (abs(_currentRightUs - rightTarget) > 1.0f);
 }
 
-void PwmController::updatePwmOutputs(bool isMosfetActive, bool isExtraActive, uint8_t mosfetOffLevel) {
+void PwmController::updatePwmOutputs(bool isMosfetActive, bool isExtraActive, uint8_t mosfetOffLevel, uint8_t powerKeyOffLevel) {
     uint32_t activeMosfetUs = 1500; // MOSFET Active target: 1500us PWM
     uint32_t inactiveMosfetUs = (mosfetOffLevel == 0) ? 1000 : 2000;
 
-    uint32_t activeExtraUs = 2000;  // Extra Pin Active target: 2000us PWM
-    uint32_t inactiveExtraUs = (mosfetOffLevel == 0) ? 1000 : 2000;
+    uint32_t activeExtraUs = 2000;  // Extra Pin / Power Key Active target: 2000us PWM
+    uint32_t inactiveExtraUs = (powerKeyOffLevel == 0) ? 1000 : 2000;
 
     writeMicros(_mosfetPin, isMosfetActive ? activeMosfetUs : inactiveMosfetUs);
     writeMicros(_extraPin, isExtraActive ? activeExtraUs : inactiveExtraUs);

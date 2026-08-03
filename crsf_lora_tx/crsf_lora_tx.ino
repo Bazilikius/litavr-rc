@@ -43,7 +43,7 @@ struct LoraPacket {
 
 void setup() {
     Serial.begin(115200);
-    delay(2000);
+    // Removed startup delays to guarantee instant boot-up under standalone BEC power supply!
 
     Serial.println("\n=============================================");
     Serial.println(" ESP32 CRSF to LoRa TRANSMITTER ");

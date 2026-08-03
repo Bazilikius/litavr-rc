@@ -7,12 +7,14 @@ ConfigManager::ConfigManager() {
     _currentConfig.servoTrigger = 1500;
     _currentConfig.servoInvertLeft = 0;
     _currentConfig.servoInvertRight = 0;
-    _currentConfig.servoMin = 1500; // Default: 1500us
-    _currentConfig.servoMax = 2000; // Default: 2000us
-    _currentConfig.servoSpeed = 100; // 100 us/second
+    _currentConfig.servoMin = 1500;
+    _currentConfig.servoMax = 2000;
+    _currentConfig.servoSpeed = 100;
     _currentConfig.loraFreq = 433000000;
     _currentConfig.allOneChannel = 0;
     _currentConfig.mosfetOffLevel = 0;
+    _currentConfig.powerKeyOffLevel = 0;
+    _currentConfig.useThreeSwitches = 0; // Default to 2 limit switches
 }
 
 void ConfigManager::begin() {
@@ -29,6 +31,8 @@ void ConfigManager::begin() {
     _currentConfig.loraFreq = _prefs.getUInt("lora_freq", 433000000);
     _currentConfig.allOneChannel = _prefs.getUChar("all_one", 0);
     _currentConfig.mosfetOffLevel = _prefs.getUChar("mos_off", 0);
+    _currentConfig.powerKeyOffLevel = _prefs.getUChar("p_key_off", 0);
+    _currentConfig.useThreeSwitches = _prefs.getUChar("use_3_sw", 0); // Load 3-switch option
 
     // Validate ranges
     if (_currentConfig.boxId < 1 || _currentConfig.boxId > 8) _currentConfig.boxId = 1;
@@ -70,12 +74,15 @@ void ConfigManager::saveConfig(RxConfig config) {
     _prefs.putUInt("lora_freq", _currentConfig.loraFreq);
     _prefs.putUChar("all_one", _currentConfig.allOneChannel);
     _prefs.putUChar("mos_off", _currentConfig.mosfetOffLevel);
+    _prefs.putUChar("p_key_off", _currentConfig.powerKeyOffLevel);
+    _prefs.putUChar("use_3_sw", _currentConfig.useThreeSwitches); // Save 3-switch option
     _prefs.end();
 
-    Serial.printf("RX Config saved: BoxId:%d | BoxSelectCh:Ch%d | Servo=Ch%d (Trig:%u, Min:%u, Max:%u, Speed:%u, InvL:%d, InvR:%d) | AllOne:%d | MosfetOff:%d | LoraFreq:%u\n",
+    Serial.printf("RX Config saved: BoxId:%d | BoxSelectCh:Ch%d | Servo=Ch%d (Trig:%u, Min:%u, Max:%u, Speed:%u, InvL:%d, InvR:%d) | AllOne:%d | MosfetOff:%d | PowerKeyOff:%d | Use3Sw:%d | LoraFreq:%u\n",
                   _currentConfig.boxId, _currentConfig.boxSelectChannel,
                   _currentConfig.servoChannel, _currentConfig.servoTrigger,
                   _currentConfig.servoMin, _currentConfig.servoMax, _currentConfig.servoSpeed,
                   _currentConfig.servoInvertLeft, _currentConfig.servoInvertRight,
-                  _currentConfig.allOneChannel, _currentConfig.mosfetOffLevel, _currentConfig.loraFreq);
+                  _currentConfig.allOneChannel, _currentConfig.mosfetOffLevel,
+                  _currentConfig.powerKeyOffLevel, _currentConfig.useThreeSwitches, _currentConfig.loraFreq);
 }

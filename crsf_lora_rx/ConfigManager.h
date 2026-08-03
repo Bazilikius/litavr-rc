@@ -18,6 +18,8 @@ struct RxConfig {
 
     uint8_t allOneChannel;     // 0 or 1, default 0
     uint8_t mosfetOffLevel;    // 0 = LOW, 1 = HIGH, default 0
+    uint8_t powerKeyOffLevel;  // 0 = LOW, 1 = HIGH, default 0
+    uint8_t useThreeSwitches;  // 0 = 2 Switches, 1 = 3 Switches, default 0
 };
 
 class ConfigManager {

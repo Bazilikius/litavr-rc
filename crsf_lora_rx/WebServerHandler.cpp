@@ -224,20 +224,39 @@ void WebServerHandler::_handleRoot() {
 
     html += "<hr>";
 
-    // 3. Signal Level Settings
-    html += "<h3>3. Сигнал вимкнення виходу (Полярність)</h3>";
-    html += "<label for='mos_off'>Який сигнал відправляти на вихід при вимкненні (MOSFET/GPIO 26 та Extra/GPIO 15):</label>";
+    // 3. Limit Switches Count Configuration
+    html += "<h3>3. Кількість кінцевиків та безпека</h3>";
+    html += "<label class='checkbox-label'>";
+    String checkedUse3Sw = config.useThreeSwitches ? "checked" : "";
+    html += "<input type='checkbox' name='use_3_sw' value='1' id='use_3_sw' " + checkedUse3Sw + "> Використовувати 3 кінцевики (включаючи GPIO 25)";
+    html += "</label>";
+    html += "<p style='font-size: 13px; color: #666; margin-top: -10px; margin-bottom: 15px;'>* Якщо вимкнено (рекомендовано для 2 кінцевиків), система повністю ігнорує 3-й кінцевик на GPIO 25, що дозволяє таймеру затримки GPIO 15 успішно запускатися без підключеного оверрайду!</p>";
+
+    html += "<hr>";
+
+    // 4. Signal Level Settings
+    html += "<h3>4. Сигнали вимкнення виходів (Полярність)</h3>";
+
+    html += "<label for='mos_off'>Сигнал вимкнення MOSFET (GPIO 26):</label>";
     html += "<select name='mos_off' id='mos_off'>";
     String mosOffSel0 = (config.mosfetOffLevel == 0) ? "selected" : "";
     String mosOffSel1 = (config.mosfetOffLevel == 1) ? "selected" : "";
-    html += "<option value='0' " + mosOffSel0 + ">LOW / 1000us PWM (Вимкнено = 1000us, Активовано = 1500us/2000us)</option>";
-    html += "<option value='1' " + mosOffSel1 + ">HIGH / 2000us PWM (Вимкнено = 2000us, Активовано = 1500us/2000us)</option>";
+    html += "<option value='0' " + mosOffSel0 + ">LOW / 1000us PWM (Вимкнено = 1000us, Активовано = 1500us)</option>";
+    html += "<option value='1' " + mosOffSel1 + ">HIGH / 2000us PWM (Вимкнено = 2000us, Активовано = 1500us)</option>";
+    html += "</select>";
+
+    html += "<label for='p_key_off'>Сигнал вимкнення Power Key (GPIO 15):</label>";
+    html += "<select name='p_key_off' id='p_key_off'>";
+    String pKeyOffSel0 = (config.powerKeyOffLevel == 0) ? "selected" : "";
+    String pKeyOffSel1 = (config.powerKeyOffLevel == 1) ? "selected" : "";
+    html += "<option value='0' " + pKeyOffSel0 + ">LOW / 1000us PWM (Вимкнено = 1000us, Активовано = 2000us)</option>";
+    html += "<option value='1' " + pKeyOffSel1 + ">HIGH / 2000us PWM (Вимкнено = 2000us, Активовано = 2000us)</option>";
     html += "</select>";
 
     html += "<hr>";
 
-    // 4. System Config
-    html += "<h3>4. Системні налаштування</h3>";
+    // 5. System Config
+    html += "<h3>5. Системні налаштування</h3>";
     html += "<label for='lora_freq'>Частота LoRa (Hz):</label>";
     html += "<input type='number' name='lora_freq' id='lora_freq' value='" + String(config.loraFreq) + "' min='100000000' max='1000000000'>";
 
@@ -255,7 +274,7 @@ void WebServerHandler::_handleSave() {
         _server.hasArg("srv_chan") && _server.hasArg("srv_trig") &&
         _server.hasArg("srv_min") && _server.hasArg("srv_max") &&
         _server.hasArg("srv_spd") && _server.hasArg("mos_off") &&
-        _server.hasArg("lora_freq")) {
+        _server.hasArg("p_key_off") && _server.hasArg("lora_freq")) {
 
         RxConfig newConfig;
         newConfig.boxId = _server.arg("box_id").toInt();
@@ -277,6 +296,8 @@ void WebServerHandler::_handleSave() {
         }
 
         newConfig.mosfetOffLevel = _server.arg("mos_off").toInt();
+        newConfig.powerKeyOffLevel = _server.arg("p_key_off").toInt();
+        newConfig.useThreeSwitches = _server.hasArg("use_3_sw") ? 1 : 0; // Read 3-switch checkbox
 
         _configManager.saveConfig(newConfig);
 
