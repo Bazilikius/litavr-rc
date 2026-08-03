@@ -1,6 +1,6 @@
 /*
- * CRSF E32 LoRa Receiver & Outputs Controller for ESP32 (Dev Module)
- * - Receives channel broadcast from Transmitter via Ebyte E32 UART LoRa Module on Serial2.
+ * CRSF LoRa Receiver & Outputs Controller for ESP32 (Dev Module)
+ * - Receives channel broadcast from Transmitter via SX127x LoRa Module.
  * - Converts raw CRSF channels (172 - 1811) to standard PWM microseconds (988 - 2012 us).
  * - Controls 2 synchronous servos (Left on GPIO 4, Right on GPIO 13) with Left and Right software inversions.
  * - Monitors up to 3 Limit Switches:
@@ -12,9 +12,9 @@
  * - Implement 8-box mesh selection logic using Box Selection Channel (1000-2000us range partitioned in 8 segments).
  * - If Box matches this unit's Box ID (or if packetCount == 0 on boot):
  *   - Servo Trigger channel is evaluated to drive Servos (UP to 2000us, Neutral/Down to 1500us).
- *   - When active, MOSFET (GPIO 26) outputs 1500us 50Hz PWM.
+ *   - When active, MOSFET (GPIO 26) outputs ACTIVE state.
  * - Automation Logic for Power Key Pin (GPIO 15):
- *   - Power Key (GPIO 15) turns ACTIVE (2000us 50Hz PWM) only if:
+ *   - Power Key (GPIO 15) turns ACTIVE only if:
  *     a) 60 seconds have elapsed since the servos were commanded DOWN (inactive).
  *     b) AND simultaneously: all active limit switches are CLOSED (LOW / OK).
  *   - If servos are active (UP), or if any active limit switch is open, or if the box is not selected, GPIO 15 goes INACTIVE immediately.
@@ -23,8 +23,7 @@
  * - GPIO 21 (Red LED) blinks at 500ms intervals during 60s countdown, stays ON constantly when countdown elapses, stays OFF otherwise.
  * - GPIO 22 (Blue LED) blinks at 200ms intervals when servos are moving, stays ON constantly when stationary.
  * - Reduced WiFi Transmit Power to 25% (WIFI_POWER_5dBm).
- * - Ebyte E32 UART LoRa connections: RX2 = GPIO 16, TX2 = GPIO 17, M0 = GPIO 5, M1 = GPIO 18.
- * - Power level configured to 21dBm (MIN), perfect for highly stable 3 km range!
+ * - LORA_DIO0 moved to GPIO 16 (from GPIO 2) to completely avoid strapping pin flashing block and boot freeze.
  */
 
 #include <Arduino.h>
@@ -32,7 +31,7 @@
 #include "ConfigManager.h"
 #include "PwmController.h"
 #include "WebServerHandler.h"
-#include "E32Module.h"
+#include "LoraModule.h"
 
 // Pin Definitions for ESP32 Dev Module
 #define LEFT_SERVO_PIN  4
@@ -44,15 +43,17 @@
 #define LOWER_SW_PIN    33 // Lower Limit Switch
 #define SERVO_UP_SW_PIN 25 // 3rd Limit Switch / Servo-UP Override
 
-// E32 UART LoRa Pin Configuration
-#define E32_M0   5
-#define E32_M1   18
-#define E32_RX   16
-#define E32_TX   17
+// LoRa SPI Pin Configuration (DIO0 moved to safe GPIO 16 to avoid flashing conflict)
+#define LORA_SS    5
+#define LORA_RST   14
+#define LORA_DIO0  16
+#define LORA_SCK   18
+#define LORA_MISO  19
+#define LORA_MOSI  23
 
 ConfigManager configManager;
 PwmController controller(LEFT_SERVO_PIN, RIGHT_SERVO_PIN, MOSFET_PIN, EXTRA_PIN, LED_PIN, UPPER_SW_PIN, LOWER_SW_PIN);
-E32Module e32(E32_M0, E32_M1, E32_RX, E32_TX);
+LoraModule lora(LORA_SS, LORA_RST, LORA_DIO0);
 
 // Global shared variables
 uint32_t packetCount = 0;
@@ -108,10 +109,7 @@ int getSelectedBox(uint16_t pulseWidth) {
 }
 
 void setup() {
-    // 1. Silent delay to allow external BEC/battery power rails to stabilize completely before starting up
-    delay(1000);
-
-    // 2. Configure Limit Switches immediately as INPUT_PULLUP to stabilize pins early on boot
+    // 1. Configure Limit Switches immediately as INPUT_PULLUP to stabilize pins early on boot
     pinMode(UPPER_SW_PIN, INPUT_PULLUP);
     pinMode(LOWER_SW_PIN, INPUT_PULLUP);
     pinMode(SERVO_UP_SW_PIN, INPUT_PULLUP);
@@ -120,7 +118,7 @@ void setup() {
     delay(2000); // 2-second safe boot delay
 
     Serial.println("\n=============================================");
-    Serial.println(" ESP32 CRSF E32 LoRa RX OUTPUT CONTROLLER ");
+    Serial.println(" ESP32 CRSF LoRa RX OUTPUT CONTROLLER ");
     Serial.println("=============================================");
 
     // Initialize Channels array with neutral/mid value
@@ -138,9 +136,14 @@ void setup() {
     // Start Web Server
     webServer.begin();
 
-    // Initialize Ebyte E32 UART LoRa Module
-    Serial.printf("[E32] Initializing Ebyte E32 at frequency %u Hz...\n", activeConfig.loraFreq);
-    e32.begin(Serial2, activeConfig.loraFreq);
+    // Initialize LoRa SPI and Receiver
+    Serial.printf("Initializing LoRa SX127x at %u Hz...\n", activeConfig.loraFreq);
+    if (!lora.begin(activeConfig.loraFreq, LORA_SCK, LORA_MISO, LORA_MOSI)) {
+        Serial.println("LoRa initialization failed! Check wiring.");
+    } else {
+        Serial.println("LoRa initialization successful. Starting continuous receive mode.");
+        lora.startReceive();
+    }
 
     // Evaluate Upper Limit Switch state at boot to initialize position organically
     bool isUpperTriggeredAtBoot = (digitalRead(UPPER_SW_PIN) == HIGH);
@@ -162,24 +165,20 @@ void loop() {
         webServer.handleClient();
     }
 
-    // 3. Poll E32 LoRa module continuously for transparent packages
-    while (e32.available() >= (int)sizeof(LoraPacket)) {
-        uint8_t sigByte1 = e32.read();
-        if (sigByte1 == 0xAA) {
-            uint8_t sigByte2 = e32.read();
-            if (sigByte2 == 0x55) { // Signature 0x55AA matched!
-                // Read the rest of the 36 bytes transparently
-                uint8_t *rest = (uint8_t*)&loraPacket + 2;
-                e32.readBytes(rest, sizeof(LoraPacket) - 2);
-
-                packetCount++;
-                for (int i = 0; i < 16; i++) {
-                    // Convert raw CRSF value (172 - 1811) to standard PWM microseconds (approx 988 - 2012 us)
-                    uint16_t rawCrsf = loraPacket.channels[i];
-                    channels[i] = ((int32_t)rawCrsf - 992) * 5 / 8 + 1500;
-                }
+    // 3. Poll LoRa for incoming packets
+    int packetSize = lora.parsePacket();
+    if (packetSize >= (int)sizeof(LoraPacket)) {
+        LoraPacket tempPacket;
+        int len = lora.readPacket((uint8_t*)&tempPacket, sizeof(tempPacket));
+        if (len == sizeof(LoraPacket) && tempPacket.signature == 0x55AA) {
+            packetCount++;
+            for (int i = 0; i < 16; i++) {
+                // Convert raw CRSF value (172 - 1811) to standard PWM microseconds (approx 988 - 2012 us)
+                uint16_t rawCrsf = tempPacket.channels[i];
+                channels[i] = ((int32_t)rawCrsf - 992) * 5 / 8 + 1500;
             }
         }
+        lora.startReceive();
     }
 
     // 4. Read Limit Switches & Apply Software Debounce
@@ -252,7 +251,7 @@ void loop() {
         if (upCmd) {
             servoActive = true;             // Move servos UP
             if (!isAnyOpen) {
-                mosfetActive = true;        // Output 1500us PWM on MOSFET (GPIO 26)
+                mosfetActive = true;        // Output ACTIVE state on MOSFET (GPIO 26)
             }
         } else {
             servoActive = false;            // Return servos to 1500us (neutral)
@@ -282,8 +281,8 @@ void loop() {
     bool elapsed60s = (loweredTimestamp != 0 && (millis() - loweredTimestamp >= 60000));
     bool extraActive = elapsed60s && allActiveSwClosed;
 
-    // Update 50Hz LEDC PWM Outputs with independent off levels
-    controller.updatePwmOutputs(mosfetActive, extraActive, activeConfig.mosfetOffLevel, activeConfig.powerKeyOffLevel);
+    // Update Digital Outputs with independent off levels
+    controller.updateDigitalOutputs(mosfetActive, extraActive, activeConfig.mosfetOffLevel, activeConfig.powerKeyOffLevel);
 
     // --- Dynamic LED Indicator logic (GPIO 21 and GPIO 22) ---
     if (loweredTimestamp != 0) {
@@ -310,18 +309,17 @@ void loop() {
     // 6. Diagnostics reporting
     if (millis() - lastReport > 5000) {
         uint32_t secondsDown = (loweredTimestamp != 0) ? (millis() - loweredTimestamp) / 1000 : 0;
-        Serial.printf("[E32 RX] Packets:%u | SelectedBox:%d (MyBox:%d, Selected:%s) | UpperOpen: %s | LowerOpen: %s | ServoUpOpen: %s | Servos: %s | MOSFET: %s | Extra (Delay %us): %s\n",
-                      packetCount,
+        Serial.printf("[RX] SelectedBox:%d (MyBox:%d, Selected:%s) | UpperOpen: %s | LowerOpen: %s | ServoUpOpen: %s | Servos: %s | MOSFET: %s | Extra (Delay %us): %s\n",
                       currentSelectedBox,
                       activeConfig.boxId,
                       isMyBoxSelected ? "YES" : "NO",
                       upperSwOpen ? "YES" : "NO",
                       lowerSwOpen ? "YES" : "NO",
                       servoUpSwOpen ? "YES" : "NO",
-                      servoActive ? "ACTIVE (2000us)" : "NEUTRAL (1500us)",
-                      mosfetActive ? "ACTIVE (1500us)" : "OFF",
+                      servoActive ? "ACTIVE" : "NEUTRAL",
+                      mosfetActive ? "ACTIVE" : "OFF",
                       secondsDown,
-                      extraActive ? "ACTIVE (2000us)" : "OFF");
+                      extraActive ? "ACTIVE" : "OFF");
         lastReport = millis();
     }
 }

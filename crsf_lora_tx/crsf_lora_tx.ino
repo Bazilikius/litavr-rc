@@ -1,32 +1,33 @@
 /*
- * CRSF to Ebyte E32 LoRa Transmitter for ESP32 (Dev Module)
+ * CRSF to LoRa Transmitter for ESP32 (Dev Module)
  * - Listens to CRSF stream on Serial2 (RX Pin 16, TX Pin 17 is unused) at CRSF baudrate (default 400000).
- * - Packs 16 channels and broadcasts them transparently over Ebyte E32 UART LoRa module on Serial1.
+ * - Packs 16 channels and broadcasts them over SX127x SPI LoRa module.
  * - Restricts WiFi TX Power to 25% for high efficiency and compliance.
- * - Ebyte E32 UART LoRa connections: RX1 = GPIO 21, TX1 = GPIO 22, M0 = GPIO 5, M1 = GPIO 18.
- * - Power level configured to 21dBm (MIN), perfect for highly stable 3 km range!
+ * - LORA_DIO0 moved to GPIO 21 (from GPIO 2) to completely avoid strapping pin flashing block and boot freeze.
  */
 
 #include <Arduino.h>
 #include <WiFi.h>
 #include "CrsfParser.h"
 #include "ConfigManager.h"
-#include "E32Module.h"
+#include "LoraModule.h"
 
 // Hardware configuration
 #define CRSF_SERIAL Serial2
 #define CRSF_RX_PIN 16
 #define CRSF_TX_PIN -1
 
-// E32 UART LoRa Pin Configuration
-#define E32_M0   5
-#define E32_M1   18
-#define E32_RX   21
-#define E32_TX   22
+// SX127x SPI Pins on ESP32 (DIO0 moved to safe GPIO 21 to avoid conflicts)
+#define LORA_SS    5
+#define LORA_RST   14
+#define LORA_DIO0  21
+#define LORA_SCK   18
+#define LORA_MISO  19
+#define LORA_MOSI  23
 
 CrsfParser parser;
 ConfigManager configManager;
-E32Module e32(E32_M0, E32_M1, E32_RX, E32_TX);
+LoraModule lora(LORA_SS, LORA_RST, LORA_DIO0);
 
 uint32_t byteCount = 0;
 uint32_t packetCount = 0;
@@ -47,7 +48,7 @@ void setup() {
     delay(2000); // 2-second safe boot delay
 
     Serial.println("\n=============================================");
-    Serial.println(" ESP32 CRSF to E32 LoRa TRANSMITTER ");
+    Serial.println(" ESP32 CRSF to LoRa TRANSMITTER ");
     Serial.println("=============================================");
 
     // Load configuration
@@ -62,9 +63,13 @@ void setup() {
     Serial.print("IP Address: ");
     Serial.println(WiFi.softAPIP());
 
-    // Initialize Ebyte E32 UART LoRa Module
-    Serial.printf("[E32] Initializing Ebyte E32 at frequency %u Hz...\n", activeConfig.loraFreq);
-    e32.begin(Serial1, activeConfig.loraFreq);
+    // Initialize SPI and LoRa
+    Serial.printf("Initializing LoRa SX127x at %u Hz...\n", activeConfig.loraFreq);
+    if (!lora.begin(activeConfig.loraFreq, LORA_SCK, LORA_MISO, LORA_MOSI)) {
+        Serial.println("LoRa initialization failed! Check wiring.");
+    } else {
+        Serial.println("LoRa initialization successful.");
+    }
 
     // Initialize CRSF Hardware Serial
     Serial.printf("Initializing CRSF on Serial2 at %u baud (RX=%d)...\n", activeConfig.crsfBaudrate, CRSF_RX_PIN);
@@ -91,9 +96,10 @@ void loop() {
                 loraPacket.channels[i] = parser.getChannel(i);
             }
 
-            // Broadcast transparently via Ebyte E32
-            e32.write((uint8_t*)&loraPacket, sizeof(loraPacket));
-            loraSentCount++;
+            // Broadcast via LoRa
+            if (lora.sendPacket((uint8_t*)&loraPacket, sizeof(loraPacket))) {
+                loraSentCount++;
+            }
         }
     }
 
@@ -103,7 +109,7 @@ void loop() {
     // Diagnostics every 5 seconds
     if (millis() - lastReport > 5000) {
         TxConfig activeConfig = configManager.getConfig();
-        Serial.printf("[E32 TX] Bytes: %u | CRSF Packets: %u | E32 Sent: %u | Freq: %u MHz\n",
+        Serial.printf("[TX] Bytes: %u | CRSF Packets: %u | LoRa Sent: %u | Freq: %u MHz\n",
                       byteCount, packetCount, loraSentCount, activeConfig.loraFreq / 1000000);
         lastReport = millis();
     }

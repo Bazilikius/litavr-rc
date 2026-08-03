@@ -14,8 +14,8 @@ public:
     // Returns true if either Left or Right servo is currently in motion
     bool isServoMoving(bool isActive, uint16_t minUs, uint16_t maxUs, bool invertLeft, bool invertRight);
 
-    // Updates MOSFET Pin (GPIO 26) and Extra Pin (GPIO 15) values via 50Hz LEDC PWM signals with independent off levels
-    void updatePwmOutputs(bool isMosfetActive, bool isExtraActive, uint8_t mosfetOffLevel, uint8_t powerKeyOffLevel);
+    // Updates MOSFET Pin (GPIO 26) and Extra Pin (GPIO 15) values via digital HIGH/LOW signals with independent off levels
+    void updateDigitalOutputs(bool isMosfetActive, bool isExtraActive, uint8_t mosfetOffLevel, uint8_t powerKeyOffLevel);
 
     // Utility to write microsecond values to a pin using ESP32 ledc peripheral
     void writeMicros(uint8_t pin, uint32_t us);
@@ -23,8 +23,8 @@ public:
 private:
     uint8_t _leftServoPin;
     uint8_t _rightServoPin;
-    uint8_t _mosfetPin;   // GPIO 26: MOSFET output (50Hz RC Switch PWM)
-    uint8_t _extraPin;    // GPIO 15: Extra output (50Hz RC Switch PWM)
+    uint8_t _mosfetPin;   // GPIO 26: MOSFET output (Digital HIGH/LOW)
+    uint8_t _extraPin;    // GPIO 15: Extra/Power Key output (Digital HIGH/LOW)
     uint8_t _ledPin;      // GPIO 27: LED indicator
     uint8_t _upperSwPin;  // GPIO 32: Upper Limit Switch
     uint8_t _lowerSwPin;  // GPIO 33: Lower Limit Switch
