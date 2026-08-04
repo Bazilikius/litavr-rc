@@ -7,14 +7,9 @@ PwmController::PwmController(uint8_t switchPin, uint8_t servoPin, uint8_t camera
     : _switchPin(switchPin), _servoPin(servoPin), _cameraPin(cameraPin) {}
 
 void PwmController::begin() {
-    analogWriteFrequency(_switchPin, PWM_FREQ);
-    analogWriteResolution(_switchPin, PWM_RES);
-
-    analogWriteFrequency(_servoPin, PWM_FREQ);
-    analogWriteResolution(_servoPin, PWM_RES);
-
-    analogWriteFrequency(_cameraPin, PWM_FREQ);
-    analogWriteResolution(_cameraPin, PWM_RES);
+    ledcAttach(_switchPin, PWM_FREQ, PWM_RES);
+    ledcAttach(_servoPin, PWM_FREQ, PWM_RES);
+    ledcAttach(_cameraPin, PWM_FREQ, PWM_RES);
 
     Serial.printf("PWM Outputs Initialized: Switch %d, Servo %d, Camera %d\n", _switchPin, _servoPin, _cameraPin);
 
@@ -41,7 +36,7 @@ void PwmController::begin() {
 void PwmController::writeMicros(uint8_t pin, uint32_t us) {
     // Convert microseconds to duty cycle (12-bit, 50Hz)
     uint32_t duty = (us * 4095) / 20000;
-    analogWrite(pin, duty);
+    ledcWrite(pin, duty);
 }
 
 void PwmController::updateSwitch(uint16_t crsfValue, uint16_t minUs, uint16_t maxUs) {
