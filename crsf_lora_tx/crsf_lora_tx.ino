@@ -1,6 +1,6 @@
 /*
  * CRSF to LoRa Transmitter for ESP32 (Dev Module)
- * - Listens to CRSF stream on Serial2 (RX Pin 16, TX Pin 17 is unused) at CRSF baudrate (default 400000).
+ * - Listens to CRSF stream on Serial2 (RX Pin 13 is safe, TX Pin -1 is unused) at CRSF baudrate (default 400000).
  * - Packs 16 channels and broadcasts them over Ebyte E32 UART LoRa module.
  * - Restricts WiFi TX Power to 25% for high efficiency and compliance.
  */
@@ -11,9 +11,9 @@
 #include "ConfigManager.h"
 #include "LoraModule.h"
 
-// Hardware configuration for CRSF
+// Hardware configuration for CRSF (avoiding GPIO 16/17 PSRAM and strapping pins)
 #define CRSF_SERIAL Serial2
-#define CRSF_RX_PIN 16
+#define CRSF_RX_PIN 13
 #define CRSF_TX_PIN -1
 
 // Ebyte E32 UART & Mode control Pin Configuration
@@ -53,7 +53,7 @@ void setup() {
         // Init successful
     }
 
-    // Initialize CRSF Hardware Serial
+    // Initialize CRSF Hardware Serial (using GPIO 13 to avoid PSRAM GPIO 16 conflict)
     CRSF_SERIAL.begin(activeConfig.crsfBaudrate, SERIAL_8N1, CRSF_RX_PIN, CRSF_TX_PIN);
 
     loraPacket.signature = 0x55AA;

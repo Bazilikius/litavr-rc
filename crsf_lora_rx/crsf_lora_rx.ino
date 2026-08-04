@@ -23,6 +23,7 @@
  * - GPIO 21 (Red LED) blinks at 500ms intervals during 60s countdown, stays ON constantly when countdown elapses, stays OFF otherwise.
  * - GPIO 22 (Blue LED) blinks at 200ms intervals when servos are moving, stays ON constantly when stationary.
  * - Reduced WiFi Transmit Power to 25% (WIFI_POWER_5dBm).
+ * - GPIO 16/17 (PSRAM pins) avoided to prevent flashing lock and boot loop issues on ESP32 Dev Modules.
  */
 
 #include <Arduino.h>
@@ -32,7 +33,7 @@
 #include "WebServerHandler.h"
 #include "LoraModule.h"
 
-// Pin Definitions for ESP32 Dev Module
+// Pin Definitions for ESP32 Dev Module (Restoring user's physical layout for GPIO 15 & 25)
 #define LEFT_SERVO_PIN  4
 #define RIGHT_SERVO_PIN 13
 #define MOSFET_PIN      26 // External MOSFET (GPIO 26)
@@ -40,12 +41,12 @@
 #define LED_PIN         27 // Status Indicator LED
 #define UPPER_SW_PIN    32 // Upper Limit Switch
 #define LOWER_SW_PIN    33 // Lower Limit Switch
-#define SERVO_UP_SW_PIN 25 // 3rd Limit Switch / Servo-UP Override
+#define SERVO_UP_SW_PIN 25 // 3rd Limit Switch / Servo-UP Override (GPIO 25)
 
-// Ebyte E32 UART & Mode control Pin Configuration on Receiver Board
-#define E32_RX_PIN 16  // Connected to E32 TXD
-#define E32_TX_PIN 17  // Connected to E32 RXD
-#define E32_M0_PIN 14  // Connected to E32 M0
+// Ebyte E32 UART & Mode control Pin Configuration on Receiver Board (GPIO 18/19 avoids PSRAM conflict)
+#define E32_RX_PIN 18  // Connected to E32 TXD
+#define E32_TX_PIN 19  // Connected to E32 RXD
+#define E32_M0_PIN 23  // Connected to E32 M0
 #define E32_M1_PIN 5   // Connected to E32 M1
 
 ConfigManager configManager;
