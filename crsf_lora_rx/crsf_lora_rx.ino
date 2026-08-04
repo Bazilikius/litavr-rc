@@ -12,9 +12,9 @@
  * - Implement 8-box mesh selection logic using Box Selection Channel (1000-2000us range partitioned in 8 segments).
  * - If Box matches this unit's Box ID (or if packetCount == 0 on boot):
  *   - Servo Trigger channel is evaluated to drive Servos (UP to 2000us, Neutral/Down to 1500us).
- *   - When active, MOSFET (GPIO 26) outputs ACTIVE state.
+ *   - When active, MOSFET (GPIO 26) outputs 1500us 50Hz PWM.
  * - Automation Logic for Power Key Pin (GPIO 15):
- *   - Power Key (GPIO 15) turns ACTIVE only if:
+ *   - Power Key (GPIO 15) turns ACTIVE (2000us 50Hz PWM) only if:
  *     a) 60 seconds have elapsed since the servos were commanded DOWN (inactive).
  *     b) AND simultaneously: all active limit switches are CLOSED (LOW / OK).
  *   - If servos are active (UP), or if any active limit switch is open, or if the box is not selected, GPIO 15 goes INACTIVE immediately.
@@ -251,7 +251,7 @@ void loop() {
         if (upCmd) {
             servoActive = true;             // Move servos UP
             if (!isAnyOpen) {
-                mosfetActive = true;        // Output ACTIVE state on MOSFET (GPIO 26)
+                mosfetActive = true;        // Output 1500us PWM on MOSFET (GPIO 26)
             }
         } else {
             servoActive = false;            // Return servos to 1500us (neutral)
@@ -281,8 +281,8 @@ void loop() {
     bool elapsed60s = (loweredTimestamp != 0 && (millis() - loweredTimestamp >= 60000));
     bool extraActive = elapsed60s && allActiveSwClosed;
 
-    // Update Digital Outputs with independent off levels
-    controller.updateDigitalOutputs(mosfetActive, extraActive, activeConfig.mosfetOffLevel, activeConfig.powerKeyOffLevel);
+    // Update 50Hz LEDC PWM Outputs with independent off levels
+    controller.updatePwmOutputs(mosfetActive, extraActive, activeConfig.mosfetOffLevel, activeConfig.powerKeyOffLevel);
 
     // --- Dynamic LED Indicator logic (GPIO 21 and GPIO 22) ---
     if (loweredTimestamp != 0) {
@@ -316,10 +316,10 @@ void loop() {
                       upperSwOpen ? "YES" : "NO",
                       lowerSwOpen ? "YES" : "NO",
                       servoUpSwOpen ? "YES" : "NO",
-                      servoActive ? "ACTIVE" : "NEUTRAL",
-                      mosfetActive ? "ACTIVE" : "OFF",
+                      servoActive ? "ACTIVE (2000us)" : "NEUTRAL (1500us)",
+                      mosfetActive ? "ACTIVE (1500us)" : "OFF",
                       secondsDown,
-                      extraActive ? "ACTIVE" : "OFF");
+                      extraActive ? "ACTIVE (2000us)" : "OFF");
         lastReport = millis();
     }
 }

@@ -7,16 +7,16 @@
 // LEDC channels for Core 2.x
 #define LEFT_LEDC_CHAN 0
 #define RIGHT_LEDC_CHAN 1
+#define EXTRA_LEDC_CHAN 2
+#define MOSFET_LEDC_CHAN 3
 
 PwmController::PwmController(uint8_t leftServoPin, uint8_t rightServoPin, uint8_t mosfetPin, uint8_t extraPin, uint8_t ledPin, uint8_t upperSwPin, uint8_t lowerSwPin)
     : _leftServoPin(leftServoPin), _rightServoPin(rightServoPin), _mosfetPin(mosfetPin), _extraPin(extraPin), _ledPin(ledPin), _upperSwPin(upperSwPin), _lowerSwPin(lowerSwPin),
       _currentLeftUs(0.0f), _currentRightUs(0.0f), _lastUpdateMs(0) {}
 
 void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uint16_t maxUs, bool isUpperTriggeredAtBoot) {
-    // Outputs configured as OUTPUT to enable clean, powerful current drive!
+    // Outputs
     pinMode(_ledPin, OUTPUT);
-    pinMode(_mosfetPin, OUTPUT);
-    pinMode(_extraPin, OUTPUT);
 
     // Initialize physical indicators: Red LED on GPIO 21, Blue LED on GPIO 22
     pinMode(21, OUTPUT);
@@ -28,11 +28,13 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     pinMode(_upperSwPin, INPUT_PULLUP);
     pinMode(_lowerSwPin, INPUT_PULLUP);
 
-    // Setup LEDC PWM on ESP32 only for Servos (Left Servo on GPIO 4, Right Servo on GPIO 13)
+    // Setup LEDC PWM on ESP32 for Servos (Left Servo on GPIO 4, Right Servo on GPIO 13) and RC Switch Outputs (GPIO 26 and GPIO 15)
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
     // Arduino ESP32 Core 3.x APIs
     ledcAttach(_leftServoPin, PWM_FREQ, PWM_RES);
     ledcAttach(_rightServoPin, PWM_FREQ, PWM_RES);
+    ledcAttach(_extraPin, PWM_FREQ, PWM_RES);
+    ledcAttach(_mosfetPin, PWM_FREQ, PWM_RES);
 #else
     // Arduino ESP32 Core 2.x APIs
     ledcSetup(LEFT_LEDC_CHAN, PWM_FREQ, PWM_RES);
@@ -40,6 +42,12 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
 
     ledcSetup(RIGHT_LEDC_CHAN, PWM_FREQ, PWM_RES);
     ledcAttachPin(_rightServoPin, RIGHT_LEDC_CHAN);
+
+    ledcSetup(EXTRA_LEDC_CHAN, PWM_FREQ, PWM_RES);
+    ledcAttachPin(_extraPin, EXTRA_LEDC_CHAN);
+
+    ledcSetup(MOSFET_LEDC_CHAN, PWM_FREQ, PWM_RES);
+    ledcAttachPin(_mosfetPin, MOSFET_LEDC_CHAN);
 #endif
 
     // Set starting positions organically based on the Upper Limit Switch state at boot!
@@ -124,13 +132,15 @@ bool PwmController::isServoMoving(bool isActive, uint16_t minUs, uint16_t maxUs,
     return (abs(_currentLeftUs - leftTarget) > 1.0f) || (abs(_currentRightUs - rightTarget) > 1.0f);
 }
 
-void PwmController::updateDigitalOutputs(bool isMosfetActive, bool isExtraActive, uint8_t mosfetOffLevel, uint8_t powerKeyOffLevel) {
-    // Output pure digital signals to directly trigger the gates of MOSFETs and switches!
-    uint8_t mosfetState = isMosfetActive ? ((mosfetOffLevel == 0) ? HIGH : LOW) : ((mosfetOffLevel == 0) ? LOW : HIGH);
-    uint8_t extraState = isExtraActive ? ((powerKeyOffLevel == 0) ? HIGH : LOW) : ((powerKeyOffLevel == 0) ? LOW : HIGH);
+void PwmController::updatePwmOutputs(bool isMosfetActive, bool isExtraActive, uint8_t mosfetOffLevel, uint8_t powerKeyOffLevel) {
+    uint32_t activeMosfetUs = 1500; // MOSFET Active target: 1500us PWM
+    uint32_t inactiveMosfetUs = (mosfetOffLevel == 0) ? 1000 : 2000;
 
-    digitalWrite(_mosfetPin, mosfetState);
-    digitalWrite(_extraPin, extraState);
+    uint32_t activeExtraUs = 2000;  // Extra Pin / Power Key Active target: 2000us PWM
+    uint32_t inactiveExtraUs = (powerKeyOffLevel == 0) ? 1000 : 2000;
+
+    writeMicros(_mosfetPin, isMosfetActive ? activeMosfetUs : inactiveMosfetUs);
+    writeMicros(_extraPin, isExtraActive ? activeExtraUs : inactiveExtraUs);
 }
 
 void PwmController::writeMicros(uint8_t pin, uint32_t us) {
@@ -145,7 +155,9 @@ void PwmController::writeMicros(uint8_t pin, uint32_t us) {
     // Arduino ESP32 Core 2.x
     uint8_t chan;
     if (pin == _leftServoPin) chan = LEFT_LEDC_CHAN;
-    else chan = RIGHT_LEDC_CHAN;
+    else if (pin == _rightServoPin) chan = RIGHT_LEDC_CHAN;
+    else if (pin == _extraPin) chan = EXTRA_LEDC_CHAN;
+    else chan = MOSFET_LEDC_CHAN;
     ledcWrite(chan, duty);
 #endif
 }
