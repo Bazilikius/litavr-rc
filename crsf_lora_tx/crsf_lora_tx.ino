@@ -1,9 +1,8 @@
 /*
  * CRSF to LoRa Transmitter for ESP32 (Dev Module)
  * - Listens to CRSF stream on Serial2 (RX Pin 16, TX Pin 17 is unused) at CRSF baudrate (default 400000).
- * - Packs 16 channels and broadcasts them over SX127x SPI LoRa module.
+ * - Packs 16 channels and broadcasts them over Ebyte E32 UART LoRa module.
  * - Restricts WiFi TX Power to 25% for high efficiency and compliance.
- * - LORA_DIO0 moved to GPIO 21 (from GPIO 2) to completely avoid strapping pin flashing block and boot freeze.
  */
 
 #include <Arduino.h>
@@ -12,29 +11,26 @@
 #include "ConfigManager.h"
 #include "LoraModule.h"
 
-// Hardware configuration
+// Hardware configuration for CRSF
 #define CRSF_SERIAL Serial2
 #define CRSF_RX_PIN 16
 #define CRSF_TX_PIN -1
 
-// SX127x SPI Pins on ESP32 (DIO0 moved to safe GPIO 21 to avoid conflicts)
-#define LORA_SS    5
-#define LORA_RST   14
-#define LORA_DIO0  21
-#define LORA_SCK   18
-#define LORA_MISO  19
-#define LORA_MOSI  23
+// Ebyte E32 UART & Mode control Pin Configuration
+#define E32_RX_PIN 18  // Connected to E32 TXD
+#define E32_TX_PIN 19  // Connected to E32 RXD
+#define E32_M0_PIN 14  // Connected to E32 M0
+#define E32_M1_PIN 21  // Connected to E32 M1
 
 CrsfParser parser;
 ConfigManager configManager;
-LoraModule lora(LORA_SS, LORA_RST, LORA_DIO0);
+LoraModule lora(E32_RX_PIN, E32_TX_PIN, E32_M0_PIN, E32_M1_PIN);
 
 uint32_t byteCount = 0;
 uint32_t packetCount = 0;
 uint32_t loraSentCount = 0;
-uint32_t lastReport = 0;
 
-struct LoraPacket {
+struct __attribute__((packed)) LoraPacket {
     uint16_t signature; // 0x55AA
     uint32_t packetId;
     uint16_t channels[16];
@@ -42,14 +38,7 @@ struct LoraPacket {
 
 void setup() {
     // 1. Silent delay to allow external BEC/battery power rails to stabilize completely before starting up
-    delay(1000);
-
-    Serial.begin(115200);
-    delay(2000); // 2-second safe boot delay
-
-    Serial.println("\n=============================================");
-    Serial.println(" ESP32 CRSF to LoRa TRANSMITTER ");
-    Serial.println("=============================================");
+    delay(3000); // Expanded boot delay to be safe and silent
 
     // Load configuration
     configManager.begin();
@@ -58,21 +47,13 @@ void setup() {
     // Start WiFi in AP mode with reduced TX power to 25%
     WiFi.softAP("CRSF-TX-Config", "12345678");
     WiFi.setTxPower(WIFI_POWER_5dBm); // ~25% WiFi TX power
-    Serial.println("WiFi Access Point 'CRSF-TX-Config' started.");
-    Serial.printf("WiFi Transmit Power limited to 5dBm (25%% power).\n");
-    Serial.print("IP Address: ");
-    Serial.println(WiFi.softAPIP());
 
-    // Initialize SPI and LoRa
-    Serial.printf("Initializing LoRa SX127x at %u Hz...\n", activeConfig.loraFreq);
-    if (!lora.begin(activeConfig.loraFreq, LORA_SCK, LORA_MISO, LORA_MOSI)) {
-        Serial.println("LoRa initialization failed! Check wiring.");
-    } else {
-        Serial.println("LoRa initialization successful.");
+    // Initialize Ebyte E32 UART LoRa Module
+    if (lora.begin(activeConfig.loraFreq)) {
+        // Init successful
     }
 
     // Initialize CRSF Hardware Serial
-    Serial.printf("Initializing CRSF on Serial2 at %u baud (RX=%d)...\n", activeConfig.crsfBaudrate, CRSF_RX_PIN);
     CRSF_SERIAL.begin(activeConfig.crsfBaudrate, SERIAL_8N1, CRSF_RX_PIN, CRSF_TX_PIN);
 
     loraPacket.signature = 0x55AA;
@@ -96,7 +77,7 @@ void loop() {
                 loraPacket.channels[i] = parser.getChannel(i);
             }
 
-            // Broadcast via LoRa
+            // Broadcast via Ebyte E32 UART
             if (lora.sendPacket((uint8_t*)&loraPacket, sizeof(loraPacket))) {
                 loraSentCount++;
             }
@@ -105,12 +86,4 @@ void loop() {
 
     // Yield to background tasks
     delay(1);
-
-    // Diagnostics every 5 seconds
-    if (millis() - lastReport > 5000) {
-        TxConfig activeConfig = configManager.getConfig();
-        Serial.printf("[TX] Bytes: %u | CRSF Packets: %u | LoRa Sent: %u | Freq: %u MHz\n",
-                      byteCount, packetCount, loraSentCount, activeConfig.loraFreq / 1000000);
-        lastReport = millis();
-    }
 }

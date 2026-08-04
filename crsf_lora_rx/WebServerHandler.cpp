@@ -10,18 +10,12 @@ void WebServerHandler::begin() {
     // Reduce WiFi Tx Power to 25% (WIFI_POWER_5dBm)
     WiFi.setTxPower(WIFI_POWER_5dBm);
 
-    Serial.println("[Web] WiFi Access Point Started: SSID='CRSF-Config-RX', Password='12345678'");
-    Serial.printf("[Web] WiFi Transmit Power limited to 5dBm (25%% power).\n");
-    Serial.print("[Web] IP Address: ");
-    Serial.println(WiFi.softAPIP());
-
     // Setup routes
     _server.on("/", std::bind(&WebServerHandler::_handleRoot, this));
     _server.on("/save", std::bind(&WebServerHandler::_handleSave, this));
     _server.on("/status", std::bind(&WebServerHandler::_handleStatus, this));
 
     _server.begin();
-    Serial.println("[Web] HTTP Web Server Started.");
 }
 
 void WebServerHandler::handleClient() {
@@ -297,7 +291,7 @@ void WebServerHandler::_handleSave() {
 
         newConfig.mosfetOffLevel = _server.arg("mos_off").toInt();
         newConfig.powerKeyOffLevel = _server.arg("p_key_off").toInt();
-        newConfig.useThreeSwitches = _server.hasArg("use_3_sw") ? 1 : 0; // Read 3-switch checkbox
+        newConfig.useThreeSwitches = _server.hasArg("use_3_sw") ? 1 : 0;
 
         _configManager.saveConfig(newConfig);
 

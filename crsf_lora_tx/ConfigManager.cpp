@@ -33,7 +33,4 @@ void ConfigManager::saveConfig(TxConfig config) {
     _prefs.putUInt("crsf_baud", _currentConfig.crsfBaudrate);
     _prefs.putUInt("lora_freq", _currentConfig.loraFreq);
     _prefs.end();
-
-    Serial.printf("TX Config saved: Baud=%u, LoRa Freq=%u\n",
-                  _currentConfig.crsfBaudrate, _currentConfig.loraFreq);
 }

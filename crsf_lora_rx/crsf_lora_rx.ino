@@ -1,6 +1,6 @@
 /*
  * CRSF LoRa Receiver & Outputs Controller for ESP32 (Dev Module)
- * - Receives channel broadcast from Transmitter via SX127x LoRa Module.
+ * - Receives channel broadcast from Transmitter via Ebyte E32 UART LoRa Module.
  * - Converts raw CRSF channels (172 - 1811) to standard PWM microseconds (988 - 2012 us).
  * - Controls 2 synchronous servos (Left on GPIO 4, Right on GPIO 13) with Left and Right software inversions.
  * - Monitors up to 3 Limit Switches:
@@ -23,7 +23,6 @@
  * - GPIO 21 (Red LED) blinks at 500ms intervals during 60s countdown, stays ON constantly when countdown elapses, stays OFF otherwise.
  * - GPIO 22 (Blue LED) blinks at 200ms intervals when servos are moving, stays ON constantly when stationary.
  * - Reduced WiFi Transmit Power to 25% (WIFI_POWER_5dBm).
- * - LORA_DIO0 moved to GPIO 16 (from GPIO 2) to completely avoid strapping pin flashing block and boot freeze.
  */
 
 #include <Arduino.h>
@@ -43,17 +42,15 @@
 #define LOWER_SW_PIN    33 // Lower Limit Switch
 #define SERVO_UP_SW_PIN 25 // 3rd Limit Switch / Servo-UP Override
 
-// LoRa SPI Pin Configuration (DIO0 moved to safe GPIO 16 to avoid flashing conflict)
-#define LORA_SS    5
-#define LORA_RST   14
-#define LORA_DIO0  16
-#define LORA_SCK   18
-#define LORA_MISO  19
-#define LORA_MOSI  23
+// Ebyte E32 UART & Mode control Pin Configuration on Receiver Board
+#define E32_RX_PIN 16  // Connected to E32 TXD
+#define E32_TX_PIN 17  // Connected to E32 RXD
+#define E32_M0_PIN 14  // Connected to E32 M0
+#define E32_M1_PIN 5   // Connected to E32 M1
 
 ConfigManager configManager;
 PwmController controller(LEFT_SERVO_PIN, RIGHT_SERVO_PIN, MOSFET_PIN, EXTRA_PIN, LED_PIN, UPPER_SW_PIN, LOWER_SW_PIN);
-LoraModule lora(LORA_SS, LORA_RST, LORA_DIO0);
+LoraModule lora(E32_RX_PIN, E32_TX_PIN, E32_M0_PIN, E32_M1_PIN);
 
 // Global shared variables
 uint32_t packetCount = 0;
@@ -77,7 +74,7 @@ const uint32_t DEBOUNCE_DELAY_MS = 50; // 50ms stable window
 // Timer for the 60-second power key delay
 uint32_t loweredTimestamp = 0;
 
-struct LoraPacket {
+struct __attribute__((packed)) LoraPacket {
     uint16_t signature; // 0x55AA
     uint32_t packetId;
     uint16_t channels[16];
@@ -85,7 +82,6 @@ struct LoraPacket {
 
 WebServerHandler webServer(configManager, packetCount, channels, upperSwOpen, lowerSwOpen, servoUpSwOpen, overrideActive, loweredTimestamp);
 
-uint32_t lastReport = 0;
 bool wifiShutDownDone = false;
 
 // Helper to check if channel triggers on a specific position with tolerances
@@ -114,12 +110,7 @@ void setup() {
     pinMode(LOWER_SW_PIN, INPUT_PULLUP);
     pinMode(SERVO_UP_SW_PIN, INPUT_PULLUP);
 
-    Serial.begin(115200);
     delay(2000); // 2-second safe boot delay
-
-    Serial.println("\n=============================================");
-    Serial.println(" ESP32 CRSF LoRa RX OUTPUT CONTROLLER ");
-    Serial.println("=============================================");
 
     // Initialize Channels array with neutral/mid value
     for (int i = 0; i < 16; i++) {
@@ -136,12 +127,8 @@ void setup() {
     // Start Web Server
     webServer.begin();
 
-    // Initialize LoRa SPI and Receiver
-    Serial.printf("Initializing LoRa SX127x at %u Hz...\n", activeConfig.loraFreq);
-    if (!lora.begin(activeConfig.loraFreq, LORA_SCK, LORA_MISO, LORA_MOSI)) {
-        Serial.println("LoRa initialization failed! Check wiring.");
-    } else {
-        Serial.println("LoRa initialization successful. Starting continuous receive mode.");
+    // Initialize Ebyte E32 UART LoRa Receiver
+    if (lora.begin(activeConfig.loraFreq)) {
         lora.startReceive();
     }
 
@@ -155,7 +142,6 @@ void setup() {
 void loop() {
     // 1. Automatic WiFi shutdown after 3 minutes (180,000 ms)
     if (!wifiShutDownDone && millis() > 180000) {
-        Serial.println("[System] 3 minutes elapsed. Disabling WiFi and SoftAP to conserve power and reduce RF noise.");
         WiFi.mode(WIFI_OFF);
         wifiShutDownDone = true;
     }
@@ -165,7 +151,7 @@ void loop() {
         webServer.handleClient();
     }
 
-    // 3. Poll LoRa for incoming packets
+    // 3. Poll E32 UART LoRa for incoming packets
     int packetSize = lora.parsePacket();
     if (packetSize >= (int)sizeof(LoraPacket)) {
         LoraPacket tempPacket;
@@ -305,21 +291,4 @@ void loop() {
     }
 
     yield();
-
-    // 6. Diagnostics reporting
-    if (millis() - lastReport > 5000) {
-        uint32_t secondsDown = (loweredTimestamp != 0) ? (millis() - loweredTimestamp) / 1000 : 0;
-        Serial.printf("[RX] SelectedBox:%d (MyBox:%d, Selected:%s) | UpperOpen: %s | LowerOpen: %s | ServoUpOpen: %s | Servos: %s | MOSFET: %s | Extra (Delay %us): %s\n",
-                      currentSelectedBox,
-                      activeConfig.boxId,
-                      isMyBoxSelected ? "YES" : "NO",
-                      upperSwOpen ? "YES" : "NO",
-                      lowerSwOpen ? "YES" : "NO",
-                      servoUpSwOpen ? "YES" : "NO",
-                      servoActive ? "ACTIVE (2000us)" : "NEUTRAL (1500us)",
-                      mosfetActive ? "ACTIVE (1500us)" : "OFF",
-                      secondsDown,
-                      extraActive ? "ACTIVE (2000us)" : "OFF");
-        lastReport = millis();
-    }
 }
