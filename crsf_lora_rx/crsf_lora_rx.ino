@@ -269,7 +269,7 @@ void loop() {
     bool extraActive = elapsed60s && allActiveSwClosed;
 
     // Update 50Hz LEDC PWM Outputs with independent off levels
-    controller.updatePwmOutputs(mosfetActive, extraActive, activeConfig.mosfetOffLevel, activeConfig.powerKeyOffLevel);
+    controller.updatePwmOutputs(mosfetActive, extraActive, activeConfig.mosfetOffLevel, activeConfig.powerKeyOffLevel, activeConfig.mosfetActiveWidth);
 
     // --- Dynamic LED Indicator logic (GPIO 21 and GPIO 22) ---
     if (loweredTimestamp != 0) {

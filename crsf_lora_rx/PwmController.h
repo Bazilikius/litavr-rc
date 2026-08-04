@@ -15,7 +15,7 @@ public:
     bool isServoMoving(bool isActive, uint16_t minUs, uint16_t maxUs, bool invertLeft, bool invertRight);
 
     // Updates MOSFET Pin (GPIO 26) and Extra Pin (GPIO 15) values via 50Hz LEDC PWM signals with independent off levels
-    void updatePwmOutputs(bool isMosfetActive, bool isExtraActive, uint8_t mosfetOffLevel, uint8_t powerKeyOffLevel);
+    void updatePwmOutputs(bool isMosfetActive, bool isExtraActive, uint8_t mosfetOffLevel, uint8_t powerKeyOffLevel, uint16_t mosfetActiveWidth);
 
     // Utility to write microsecond values to a pin using ESP32 ledc peripheral
     void writeMicros(uint8_t pin, uint32_t us);

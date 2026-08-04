@@ -235,8 +235,16 @@ void WebServerHandler::_handleRoot() {
     html += "<select name='mos_off' id='mos_off'>";
     String mosOffSel0 = (config.mosfetOffLevel == 0) ? "selected" : "";
     String mosOffSel1 = (config.mosfetOffLevel == 1) ? "selected" : "";
-    html += "<option value='0' " + mosOffSel0 + ">LOW / 1000us PWM (Вимкнено = 1000us, Активовано = 1500us)</option>";
-    html += "<option value='1' " + mosOffSel1 + ">HIGH / 2000us PWM (Вимкнено = 2000us, Активовано = 1500us)</option>";
+    html += "<option value='0' " + mosOffSel0 + ">LOW / 1000us PWM (Вимкнено = 1000us, Активовано = " + String(config.mosfetActiveWidth) + "us)</option>";
+    html += "<option value='1' " + mosOffSel1 + ">HIGH / 2000us PWM (Вимкнено = 2000us, Активовано = " + String(config.mosfetActiveWidth) + "us)</option>";
+    html += "</select>";
+
+    html += "<label for='mos_act'>Сигнал активації MOSFET (GPIO 26):</label>";
+    html += "<select name='mos_act' id='mos_act'>";
+    String mosActSel2000 = (config.mosfetActiveWidth == 2000) ? "selected" : "";
+    String mosActSel2500 = (config.mosfetActiveWidth == 2500) ? "selected" : "";
+    html += "<option value='2000' " + mosActSel2000 + ">2000us PWM</option>";
+    html += "<option value='2500' " + mosActSel2500 + ">2500us PWM</option>";
     html += "</select>";
 
     html += "<label for='p_key_off'>Сигнал вимкнення Power Key (GPIO 15):</label>";
@@ -268,6 +276,7 @@ void WebServerHandler::_handleSave() {
         _server.hasArg("srv_chan") && _server.hasArg("srv_trig") &&
         _server.hasArg("srv_min") && _server.hasArg("srv_max") &&
         _server.hasArg("srv_spd") && _server.hasArg("mos_off") &&
+        _server.hasArg("mos_act") &&
         _server.hasArg("p_key_off") && _server.hasArg("lora_freq")) {
 
         RxConfig newConfig;
@@ -290,6 +299,7 @@ void WebServerHandler::_handleSave() {
         }
 
         newConfig.mosfetOffLevel = _server.arg("mos_off").toInt();
+        newConfig.mosfetActiveWidth = _server.arg("mos_act").toInt();
         newConfig.powerKeyOffLevel = _server.arg("p_key_off").toInt();
         newConfig.useThreeSwitches = _server.hasArg("use_3_sw") ? 1 : 0;
 

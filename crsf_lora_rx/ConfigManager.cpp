@@ -15,6 +15,7 @@ ConfigManager::ConfigManager() {
     _currentConfig.mosfetOffLevel = 0;
     _currentConfig.powerKeyOffLevel = 0;
     _currentConfig.useThreeSwitches = 0;
+    _currentConfig.mosfetActiveWidth = 2000;
 }
 
 void ConfigManager::begin() {
@@ -33,8 +34,12 @@ void ConfigManager::begin() {
     _currentConfig.mosfetOffLevel = _prefs.getUChar("mos_off", 0);
     _currentConfig.powerKeyOffLevel = _prefs.getUChar("p_key_off", 0);
     _currentConfig.useThreeSwitches = _prefs.getUChar("use_3_sw", 0);
+    _currentConfig.mosfetActiveWidth = _prefs.getUShort("mos_act_w", 2000);
 
     // Validate ranges
+    if (_currentConfig.mosfetActiveWidth != 2000 && _currentConfig.mosfetActiveWidth != 2500) {
+        _currentConfig.mosfetActiveWidth = 2000;
+    }
     if (_currentConfig.boxId < 1 || _currentConfig.boxId > 8) _currentConfig.boxId = 1;
     if (_currentConfig.boxSelectChannel < 1 || _currentConfig.boxSelectChannel > 16) _currentConfig.boxSelectChannel = 15;
     if (_currentConfig.servoChannel < 1 || _currentConfig.servoChannel > 16) _currentConfig.servoChannel = 16;
@@ -76,5 +81,6 @@ void ConfigManager::saveConfig(RxConfig config) {
     _prefs.putUChar("mos_off", _currentConfig.mosfetOffLevel);
     _prefs.putUChar("p_key_off", _currentConfig.powerKeyOffLevel);
     _prefs.putUChar("use_3_sw", _currentConfig.useThreeSwitches);
+    _prefs.putUShort("mos_act_w", _currentConfig.mosfetActiveWidth);
     _prefs.end();
 }

@@ -15,8 +15,12 @@ PwmController::PwmController(uint8_t leftServoPin, uint8_t rightServoPin, uint8_
       _currentLeftUs(0.0f), _currentRightUs(0.0f), _lastUpdateMs(0) {}
 
 void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uint16_t maxUs, bool isUpperTriggeredAtBoot) {
-    // Outputs
+    // Explicitly configure output pins
     pinMode(_ledPin, OUTPUT);
+    pinMode(_leftServoPin, OUTPUT);
+    pinMode(_rightServoPin, OUTPUT);
+    pinMode(_extraPin, OUTPUT);
+    pinMode(_mosfetPin, OUTPUT);
 
     // Initialize physical indicators: Red LED on GPIO 21, Blue LED on GPIO 22
     pinMode(21, OUTPUT);
@@ -132,8 +136,8 @@ bool PwmController::isServoMoving(bool isActive, uint16_t minUs, uint16_t maxUs,
     return (abs(_currentLeftUs - leftTarget) > 1.0f) || (abs(_currentRightUs - rightTarget) > 1.0f);
 }
 
-void PwmController::updatePwmOutputs(bool isMosfetActive, bool isExtraActive, uint8_t mosfetOffLevel, uint8_t powerKeyOffLevel) {
-    uint32_t activeMosfetUs = 1500; // MOSFET Active target: 1500us PWM
+void PwmController::updatePwmOutputs(bool isMosfetActive, bool isExtraActive, uint8_t mosfetOffLevel, uint8_t powerKeyOffLevel, uint16_t mosfetActiveWidth) {
+    uint32_t activeMosfetUs = (mosfetActiveWidth == 2500) ? 2500 : 2000; // Selectable 2000us or 2500us output signal
     uint32_t inactiveMosfetUs = (mosfetOffLevel == 0) ? 1000 : 2000;
 
     uint32_t activeExtraUs = 2000;  // Extra Pin / Power Key Active target: 2000us PWM
