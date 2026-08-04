@@ -10,6 +10,7 @@
 #include "CrsfParser.h"
 #include "ConfigManager.h"
 #include "LoraModule.h"
+#include "WebServerHandler.h"
 
 // Hardware configuration for CRSF (avoiding GPIO 16/17 PSRAM and strapping pins)
 #define CRSF_SERIAL Serial2
@@ -36,6 +37,10 @@ struct __attribute__((packed)) LoraPacket {
     uint16_t channels[16];
 } loraPacket;
 
+WebServerHandler webServer(configManager, byteCount, packetCount, loraSentCount);
+
+bool wifiShutDownDone = false;
+
 void setup() {
     // 1. Silent delay to allow external BEC/battery power rails to stabilize completely before starting up
     delay(3000); // Expanded boot delay to be safe and silent
@@ -44,9 +49,8 @@ void setup() {
     configManager.begin();
     TxConfig activeConfig = configManager.getConfig();
 
-    // Start WiFi in AP mode with reduced TX power to 25%
-    WiFi.softAP("CRSF-TX-Config", "12345678");
-    WiFi.setTxPower(WIFI_POWER_5dBm); // ~25% WiFi TX power
+    // Start WiFi in AP mode with reduced TX power to 25% and begin Web Server
+    webServer.begin();
 
     // Initialize Ebyte E32 UART LoRa Module
     if (lora.begin(activeConfig.loraFreq)) {
@@ -61,7 +65,18 @@ void setup() {
 }
 
 void loop() {
-    // Parse incoming CRSF stream
+    // 1. Automatic WiFi shutdown after 3 minutes (180,000 ms)
+    if (!wifiShutDownDone && millis() > 180000) {
+        WiFi.mode(WIFI_OFF);
+        wifiShutDownDone = true;
+    }
+
+    // 2. Handle Web requests (if WiFi is still on)
+    if (!wifiShutDownDone) {
+        webServer.handleClient();
+    }
+
+    // 3. Parse incoming CRSF stream
     uint8_t readLimit = 0;
     while (CRSF_SERIAL.available() && readLimit < 128) {
         uint8_t b = CRSF_SERIAL.read();
