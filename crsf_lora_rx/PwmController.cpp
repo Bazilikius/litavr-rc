@@ -1,14 +1,7 @@
 #include "PwmController.h"
-#include <esp_arduino_version.h>
 
 #define PWM_FREQ 50
-#define PWM_RES 14 // 14-bit resolution for maximum ESP32 clock division compatibility (0 - 16383)
-
-// LEDC channels for Core 2.x
-#define LEFT_LEDC_CHAN 0
-#define RIGHT_LEDC_CHAN 1
-#define EXTRA_LEDC_CHAN 2
-#define MOSFET_LEDC_CHAN 3
+#define PWM_RES 14 // 14-bit resolution (0 - 16383)
 
 PwmController::PwmController(uint8_t leftServoPin, uint8_t rightServoPin, uint8_t mosfetPin, uint8_t extraPin, uint8_t ledPin, uint8_t upperSwPin, uint8_t lowerSwPin)
     : _leftServoPin(leftServoPin), _rightServoPin(rightServoPin), _mosfetPin(mosfetPin), _extraPin(extraPin), _ledPin(ledPin), _upperSwPin(upperSwPin), _lowerSwPin(lowerSwPin),
@@ -32,27 +25,18 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     pinMode(_upperSwPin, INPUT_PULLUP);
     pinMode(_lowerSwPin, INPUT_PULLUP);
 
-    // Setup LEDC PWM on ESP32 for Servos (Left Servo on GPIO 4, Right Servo on GPIO 13) and RC Switch Outputs (GPIO 26 and GPIO 15)
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
-    // Arduino ESP32 Core 3.x APIs
-    ledcAttach(_leftServoPin, PWM_FREQ, PWM_RES);
-    ledcAttach(_rightServoPin, PWM_FREQ, PWM_RES);
-    ledcAttach(_extraPin, PWM_FREQ, PWM_RES);
-    ledcAttach(_mosfetPin, PWM_FREQ, PWM_RES);
-#else
-    // Arduino ESP32 Core 2.x APIs
-    ledcSetup(LEFT_LEDC_CHAN, PWM_FREQ, PWM_RES);
-    ledcAttachPin(_leftServoPin, LEFT_LEDC_CHAN);
+    // Setup 50Hz 14-bit PWM on the pins using universally compatible analogWrite API
+    analogWriteFrequency(_leftServoPin, PWM_FREQ);
+    analogWriteResolution(_leftServoPin, PWM_RES);
 
-    ledcSetup(RIGHT_LEDC_CHAN, PWM_FREQ, PWM_RES);
-    ledcAttachPin(_rightServoPin, RIGHT_LEDC_CHAN);
+    analogWriteFrequency(_rightServoPin, PWM_FREQ);
+    analogWriteResolution(_rightServoPin, PWM_RES);
 
-    ledcSetup(EXTRA_LEDC_CHAN, PWM_FREQ, PWM_RES);
-    ledcAttachPin(_extraPin, EXTRA_LEDC_CHAN);
+    analogWriteFrequency(_extraPin, PWM_FREQ);
+    analogWriteResolution(_extraPin, PWM_RES);
 
-    ledcSetup(MOSFET_LEDC_CHAN, PWM_FREQ, PWM_RES);
-    ledcAttachPin(_mosfetPin, MOSFET_LEDC_CHAN);
-#endif
+    analogWriteFrequency(_mosfetPin, PWM_FREQ);
+    analogWriteResolution(_mosfetPin, PWM_RES);
 
     // Set starting positions organically based on the Upper Limit Switch state at boot!
     if (isUpperTriggeredAtBoot) {
@@ -158,17 +142,5 @@ void PwmController::writeMicros(uint8_t pin, uint32_t us) {
     // Convert microseconds to duty cycle (14-bit, 50Hz)
     // 50Hz period is 20000 microseconds. 14-bit max duty is 16383.
     uint32_t duty = (us * 16383) / 20000;
-
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
-    // Arduino ESP32 Core 3.x
-    ledcWrite(pin, duty);
-#else
-    // Arduino ESP32 Core 2.x
-    uint8_t chan;
-    if (pin == _leftServoPin) chan = LEFT_LEDC_CHAN;
-    else if (pin == _rightServoPin) chan = RIGHT_LEDC_CHAN;
-    else if (pin == _extraPin) chan = EXTRA_LEDC_CHAN;
-    else chan = MOSFET_LEDC_CHAN;
-    ledcWrite(chan, duty);
-#endif
+    analogWrite(pin, duty);
 }
