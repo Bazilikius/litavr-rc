@@ -7,7 +7,7 @@ ConfigManager::ConfigManager() {
     _currentConfig.servoTrigger = 1500;
     _currentConfig.servoInvertLeft = 0;
     _currentConfig.servoInvertRight = 0;
-    _currentConfig.servoMin = 1500;
+    _currentConfig.servoMin = 1000;
     _currentConfig.servoMax = 2000;
     _currentConfig.servoSpeed = 100;
     _currentConfig.loraFreq = 433000000;
@@ -26,7 +26,7 @@ void ConfigManager::begin() {
     _currentConfig.servoTrigger = _prefs.getUShort("srv_trig", 1500);
     _currentConfig.servoInvertLeft = _prefs.getUChar("srv_inv_l", 0);
     _currentConfig.servoInvertRight = _prefs.getUChar("srv_inv", 0);
-    _currentConfig.servoMin = _prefs.getUShort("srv_min", 1500);
+    _currentConfig.servoMin = _prefs.getUShort("srv_min", 1000);
     _currentConfig.servoMax = _prefs.getUShort("srv_max", 2000);
     _currentConfig.servoSpeed = _prefs.getUShort("srv_spd", 100);
     _currentConfig.loraFreq = _prefs.getUInt("lora_freq", 433000000);
@@ -43,7 +43,7 @@ void ConfigManager::begin() {
     if (_currentConfig.boxId < 1 || _currentConfig.boxId > 8) _currentConfig.boxId = 1;
     if (_currentConfig.boxSelectChannel < 1 || _currentConfig.boxSelectChannel > 16) _currentConfig.boxSelectChannel = 15;
     if (_currentConfig.servoChannel < 1 || _currentConfig.servoChannel > 16) _currentConfig.servoChannel = 16;
-    if (_currentConfig.servoMin < 500 || _currentConfig.servoMin > 2500) _currentConfig.servoMin = 1500;
+    if (_currentConfig.servoMin < 500 || _currentConfig.servoMin > 2500) _currentConfig.servoMin = 1000;
     if (_currentConfig.servoMax < 500 || _currentConfig.servoMax > 2500) _currentConfig.servoMax = 2000;
     if (_currentConfig.servoSpeed < 5 || _currentConfig.servoSpeed > 5000) _currentConfig.servoSpeed = 100;
 

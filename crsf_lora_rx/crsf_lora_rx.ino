@@ -218,12 +218,6 @@ void loop() {
     // If packetCount == 0 (no transmitter signal yet), default this box as SELECTED to enable offline operation immediately!
     bool isMyBoxSelected = (packetCount == 0) || (currentSelectedBox == activeConfig.boxId);
 
-    // Servo trigger evaluation (evaluates only if packets are received to prevent trigger artifacts on boot)
-    bool triggerActive = (packetCount > 0) && isTriggerActive(channels[activeConfig.servoChannel - 1], activeConfig.servoTrigger);
-
-    bool servoActive = false;
-    bool mosfetActive = false;
-
     // Safety Override: Evaluate based on configured limit switches (2 or 3 switches)
     bool isAnyOpen = false;
     if (activeConfig.useThreeSwitches == 1) {
@@ -233,17 +227,24 @@ void loop() {
     }
     overrideActive = isAnyOpen;
 
+    // Servo trigger channel value
+    uint16_t srvChVal = channels[activeConfig.servoChannel - 1];
+
+    // Servos move UP on 2000us (1950-2050) OR if the Servo-UP override switch is open (if useThreeSwitches is enabled)
+    bool servoUpCmd = (packetCount > 0) && isTriggerActive(srvChVal, 2000);
+    if (activeConfig.useThreeSwitches == 1 && servoUpSwOpen) {
+        servoUpCmd = true;
+    }
+
+    // MOSFET (GPIO 26) turns ON at 1500us (1400-1600) only, and if no limit switch is open (no override)
+    bool mosfetOnCmd = (packetCount == 0 || isTriggerActive(srvChVal, 1500)) && !isAnyOpen;
+
+    bool servoActive = false;
+    bool mosfetActive = false;
+
     if (isMyBoxSelected) {
-        bool upCmd = triggerActive || (activeConfig.useThreeSwitches == 1 && servoUpSwOpen);
-        if (upCmd) {
-            servoActive = true;             // Move servos UP
-            if (!isAnyOpen) {
-                mosfetActive = true;        // Output 1500us PWM on MOSFET (GPIO 26)
-            }
-        } else {
-            servoActive = false;            // Return servos to 1500us (neutral)
-            mosfetActive = false;
-        }
+        servoActive = servoUpCmd;
+        mosfetActive = mosfetOnCmd;
     } else {
         servoActive = false;
         mosfetActive = false;

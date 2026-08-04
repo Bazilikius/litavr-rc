@@ -2,7 +2,7 @@
 #include <esp_arduino_version.h>
 
 #define PWM_FREQ 50
-#define PWM_RES 16 // 16-bit resolution for maximum precision (0 - 65535)
+#define PWM_RES 14 // 14-bit resolution for maximum ESP32 clock division compatibility (0 - 16383)
 
 // LEDC channels for Core 2.x
 #define LEFT_LEDC_CHAN 0
@@ -65,11 +65,18 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
 
     _lastUpdateMs = millis();
 
-    // Startup test sequence: sweep servos slowly and synchronously to verify hardware
-    _currentLeftUs = 1500.0f;
-    _currentRightUs = 1500.0f;
-    writeMicros(_leftServoPin, 1500);
-    writeMicros(_rightServoPin, 1500);
+    // Startup test sequence: sweep servos from 1000us to 2000us and back on boot to verify physical connectivity
+    for (uint32_t us = 1000; us <= 2000; us += 20) {
+        writeMicros(_leftServoPin, us);
+        writeMicros(_rightServoPin, us);
+        delay(10);
+    }
+    delay(200);
+    for (uint32_t us = 2000; us >= 1000; us -= 20) {
+        writeMicros(_leftServoPin, us);
+        writeMicros(_rightServoPin, us);
+        delay(10);
+    }
     delay(200);
 
     // Toggle LED
@@ -148,9 +155,9 @@ void PwmController::updatePwmOutputs(bool isMosfetActive, bool isExtraActive, ui
 }
 
 void PwmController::writeMicros(uint8_t pin, uint32_t us) {
-    // Convert microseconds to duty cycle (16-bit, 50Hz)
-    // 50Hz period is 20000 microseconds. 16-bit max duty is 65535.
-    uint32_t duty = (us * 65535) / 20000;
+    // Convert microseconds to duty cycle (14-bit, 50Hz)
+    // 50Hz period is 20000 microseconds. 14-bit max duty is 16383.
+    uint32_t duty = (us * 16383) / 20000;
 
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
     // Arduino ESP32 Core 3.x
