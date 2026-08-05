@@ -1,54 +1,84 @@
-# ESP32-C3 Super Mini CRSF Triple Output & Web Configurator
+# ESP32 CRSF LoRa Mesh Switch System
 
-This project implements a CRSF (TBS Crossfire) protocol parser for the **ESP32-C3 Super Mini** that parses incoming RC channels, controls three independent PWM outputs (**RC Switch**, **Servo**, and **Camera Switch**), and provides a local **WiFi Web Interface** featuring a live status monitor and highly customizable PWM signal limits for each output.
+Це сучасна, високонадійна бездротова система керування з резервуванням та автоматичним контролем безпеки на базі плат **ESP32 Dev Module** та модулів **SX127x SPI LoRa** (програмується у середовищі **Arduino IDE / C++**).
 
-## Hardware Setup (ESP32-C3 Super Mini)
+Система розроблена спеціально для віддаленого керування сервоприводами, силовими MOSFET-ключами та індикаторами з автоматичним відключенням та блокуванням при виявленні несправностей механічних кінцевиків.
 
-| Component | Super Mini Pin | Arduino Pin | Note |
-| --- | --- | --- | --- |
-| CRSF RX (From Receiver TX) | GPIO 6 | 6 | Serial1 RX (Listen-only configuration) |
-| CRSF TX (To Receiver RX) | - | - | Unused (TX set to -1 on ESP to prevent transmission) |
-| RC Switch PWM Output | GPIO 5 | 5 | PWM Output (Configurable Channel & Limits) |
-| Servo PWM Output | GPIO 4 | 4 | PWM Output (Configurable Channel & Limits) |
-| Camera Switch PWM Output | GPIO 3 | 3 | PWM Output (Configurable Channel & Limits) |
-| GND | GND | GND | Common Ground |
-| 5V / VCC | 5V | 5V | Power for ESP32, Receiver, and Servos |
+---
 
-## Features
+## ⚡️ Запобігання конфліктам прошивання та автономного завантаження (Safe Pinout)
 
-- **WiFi Web Interface**: Configures channel mappings dynamically via a responsive webpage.
-- **Customizable PWM Ranges**: Set individual Minimum and Maximum pulse widths (from 500µs up to 2500µs) for the Switch, Servo, and Camera Switch outputs. Perfect for adjusting servo travel endpoints, offsets, or switch travel!
-- **Web Status / Port Monitor**: Live-updating browser view of incoming bytes, successfully parsed packets, and real-time tick values for all 16 CRSF channels.
-- **Triple Outputs**: Map independent functions to Switch (GPIO 5), Servo (GPIO 4), and Camera Switch (GPIO 3).
-- **Selectable Baudrates**: Supports 115200, 400000 (standard), and 420000 baud, configurable on-the-fly.
-- **Persistent Preferences**: Saves customized parameters to non-volatile memory (NVS) using ESP32 Preferences.
-- **Boot-up Sweeps**: Performs startup calibration/diagnostic sweeps on all three outputs to confirm connection.
+Усі апаратні виводи системи підключені до безпечних, не-strapping пінів ESP32. Це гарантує стабільний автономний запуск та прошивання в Arduino IDE без фізичного відключення дротів!
 
-## How to Configure Channel Mappings & PWM Limits
+### 💡 Що робити, якщо плата не запускається від автономного живлення (без USB від ПК):
+1. **Головне програмне рішення:** У меню інструментів Arduino IDE переконайтеся, що параметр **"USB CDC On Boot"** встановлено у стан **"Disabled"** (Вимкнено). Це критично, щоб ESP32 не застигала на старті в очікуванні активного USB-з'єднання з комп'ютером.
+2. Для максимальної стабілізації ланцюга автоскидання при автономному живленні рекомендується підключити конденсатор ємністю **10 мкФ** між контактами **EN (RST)** та **GND** на платі ESP32.
 
-1. **Power on** the ESP32-C3 Super Mini. All three outputs will perform a 1.5-second test sweep to verify connections.
-2. Search for WiFi networks on your phone or computer and connect to:
-   - **SSID**: `CRSF-Config`
-   - **Password**: `12345678`
-3. Open your web browser and go to: **`http://192.168.4.1`**
-4. The dashboard displays:
-   - **Link Status** (ONLINE / NO DATA)
-   - **Live Bytes Received** & **Parsed RC Packets**
-   - **Live Channels Monitor** grid showing the current tick values of all 16 receiver channels.
-5. In each output section, configure:
-   - The mapped **CRSF Channel** (CH 1–16).
-   - The **Minimum PWM (us)** and **Maximum PWM (us)** endpoints (default is 1000µs and 2000µs). This allows precise tuning of travel endpoints or endpoints limit for switches and servos!
-6. Select the **Baudrate** matching your receiver. Click **Save Configuration** (the ESP32 will reboot automatically to safely apply your configuration changes).
+---
 
-## Installation (Arduino IDE)
+## 📋 Основні Особливості Системної Логіки
 
-1. Ensure you have the **ESP32 board support** installed (v3.0.0 or higher).
-2. Select `ESP32C3 Dev Module` under boards.
-3. In `Tools`, make sure **`USB CDC On Boot`** is set to **`Enabled`** to read the hardware debugging diagnostics in the Serial Monitor.
-4. Disconnect RX (Pin 6) during uploading, then reconnect it.
+1. **Розділена архітектура (Передавач і Приймачі):**
+   - **Передавач (`crsf_lora_tx`):** Отримує потік даних CRSF на `Serial2` (RX=GPIO 16) і транслює 16-канальні пакети по радіоканалу через LoRa.
+   - **Приймачі (`crsf_lora_rx`):** Приймають LoRa-трансляцію та незалежно керують виконавчими пристроями.
+2. **Сітка Mesh на 8 незалежних ящиків:**
+   - Кожен приймач налаштовується на конкретний номер ящика **Box ID (1 - 8)** у веб-інтерфейсі.
+   - Один з каналів CRSF визначається як **Канал вибору ящика**. Повний діапазон сигналу (1000мкс - 2000мкс) ділиться на 8 рівних зон (по 125мкс на ящик).
+   - Коли значення каналу потрапляє в зону вашого Box ID, приймач стає **активним** і реагує на керуючий тумблер сервоприводів.
+   - **Робота в офлайн-режимі (Без TX):** Якщо приймач не отримує LoRa-сигнал на старті (`packetCount == 0`), він за замовчуванням вважає себе **активним (Selected)**. Це дозволяє перевіряти роботу кінцевиків, сервоприводів та таймерів відразу після увімкнення живлення, без увімкненого пульта.
+3. **Синхронне керування сервоприводами з інверсією:**
+   - Керує двома сервоприводами: Лівим (GPIO 4) та Правим (GPIO 13).
+   - Підтримує незалежне налаштування **інверсії** для кожного сервоприводу та регулювання робочих лімітів (Min/Max PWM) через Web UI.
+   - Швидкість руху сервоприводів регулюється користувачем (у мікросекундах за секунду, наприклад, 100 us/s).
+4. **Система з 3 кінцевих вимикачів та безпека:**
+   - **Верхній кінцевик (GPIO 32)** та **Нижній кінцевик (GPIO 33)** з внутрішніми підтяжками `INPUT_PULLUP` та 50мс програмним антидребезгом (debounce).
+   - **Кінцевик Servo-UP (GPIO 25):** При його розмиканні (HIGH) сервоприводи автоматично піднімаються вгору (активна позиція), діючи як механічний оверрайд.
+   - **Логіка Аварійного Відключення:** Якщо хоча б один з трьох кінцевиків відкритий (HIGH) — силовове навантаження на MOSFET (GPIO 26) негайно вимикається.
+5. **Автоматична затримка Power Key (GPIO 15):**
+   - Power Key (GPIO 15) активується (видає HIGH) тільки якщо **всі 3 кінцевики повністю закриті (LOW)** і минуло **60 секунд** з моменту опускання сервоприводів вниз (нейтральне положення).
+   - Будь-яке розмикання кінцевиків або підняття сервоприводів негайно скидає таймер та вимикає Power Key.
+6. **Розумна індикація стану світлодіодами:**
+   - **Червоний світлодіод (GPIO 21):** Блимає (з інтервалом 500мс), коли запущено і йде 60-секундний зворотній відлік таймера. Коли таймер досягає нуля і Power Key активовано, світить постійно. В інших випадках — вимкнений.
+   - **Синій світлодіод (GPIO 22):** Блимає (з інтервалом 200мс), коли сервоприводи рухаються. Коли сервоприводи зупинились у цільовому положенні — світить постійно (солідно).
+   - **Статусний світлодіод (GPIO 27):** Світить постійно, якщо Верхній кінцевик відкритий/спрацював.
+7. **Автоматичне вимкнення WiFi через 3 хвилини:**
+   - Для зменшення RF-перешкод і зниження енергоспоживання, приймач повністю вимикає свій WiFi Access Point та Web-сервер через 3 хвилини (180 000 мс) після увімкнення живлення.
+   - Потужність сигналу WiFi обмежена до 25% (~5dBm) під час роботи.
 
-## Troubleshooting
+---
 
-- **No Data in Web/Serial Monitor**: Ensure `USB CDC On Boot` is **Enabled** and check RX wiring.
-- **Upload Fails**: Disconnect the receiver from Pin 6 (RX) before uploading. Incoming CRSF data can block the serial bootloader.
-- **Outputs Not Moving**: Ensure a **Common Ground (GND)** is connected between the ESP32-C3, the receiver, and the servos/switches.
+## 🔌 Схема Підключення (ESP32 Dev Module)
+
+### 📡 Модуль LoRa SX127x:
+* **SCK**   -> GPIO 18
+* **MISO**  -> GPIO 19
+* **MOSI**  -> GPIO 23
+* **CS / SS** -> GPIO 5
+* **RST**   -> GPIO 14
+* **DIO0 (Приймач RX)** -> **GPIO 16** *(Надійно захищено від конфліктів завантаження/прошивання!)*
+* **DIO0 (Передавач TX)** -> **GPIO 21** *(Надійно захищено від конфліктів завантаження/прошивання!)*
+
+### ⚙️ Виконавчі пристрої (Приймач RX):
+* **Left Servo PWM**  -> GPIO 4 *(Захищений від strapping-ефекту при завантаженні)*
+* **Right Servo PWM** -> GPIO 13
+* **External MOSFET (Силовий ключ)** -> GPIO 26 *(Цифровий вихід HIGH / LOW)*
+* **Power Key (Ключ з автоматичною затримкою)** -> GPIO 15 *(Цифровий вихід HIGH / LOW)*
+* **Верхній кінцевик (Upper Limit Switch)** -> GPIO 32 *(Підключення до GND)*
+* **Нижній кінцевик (Lower Limit Switch)** -> GPIO 33 *(Підключення до GND)*
+* **Кінцевик Servo-UP Override** -> GPIO 25 *(Підключення до GND)*
+* **Червоний LED (Таймер)** -> GPIO 21
+* **Синій LED (Рух серво)** -> GPIO 22
+* **LED can Upper limit switch** -> GPIO 27
+
+---
+
+## 💻 Налаштування через Web UI
+
+Для налаштування параметрів підключіться до WiFi мережі **"CRSF-Config-RX"** (пароль `12345678`) протягом перших 3-х хвилин після ввімкнення та відкрийте в браузері IP-адресу `http://192.168.4.1/`.
+
+У веб-інтерфейсі приймача доступні:
+- Вибір індивідуального **Box ID** та каналу сітки.
+- Увімкнення режиму **"Все одним каналом"** для автоматичного дублювання каналу серво на вибір ящика.
+- Калібрування Min/Max кутів сервоприводів та їх швидкості руху.
+- Налаштування полярності сигналу вимкнення (LOW 1000мкс чи HIGH 2000мкс) окремо для MOSFET та Power Key виходів.
+- Моніторинг живих статусів кінцевиків, LoRa-пакетів, зворотного відліку та значень каналів.

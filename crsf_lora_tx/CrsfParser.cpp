@@ -101,7 +101,6 @@ bool CrsfParser::processByte(uint8_t byte) {
         _bufferIndex -= totalLen;
 
         if (success) return true;
-        // If it was a valid frame but not RC_CHANNELS, continue searching the remaining buffer
     }
 
     return false;

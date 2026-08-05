@@ -5,19 +5,18 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include "ConfigManager.h"
-#include "CrsfParser.h"
 
 class WebServerHandler {
 public:
-    WebServerHandler(ConfigManager &configManager, CrsfParser &parser, uint32_t &byteCount, uint32_t &packetCount);
+    WebServerHandler(ConfigManager &configManager, uint32_t &byteCount, uint32_t &packetCount, uint32_t &loraSentCount);
     void begin();
     void handleClient();
 
 private:
     ConfigManager &_configManager;
-    CrsfParser &_parser;
     uint32_t &_byteCount;
     uint32_t &_packetCount;
+    uint32_t &_loraSentCount;
     WebServer _server;
 
     void _handleRoot();
