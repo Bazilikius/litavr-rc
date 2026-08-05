@@ -2,6 +2,7 @@
 #define PWM_CONTROLLER_H
 
 #include <Arduino.h>
+#include <Servo.h>
 
 class PwmController {
 public:
@@ -33,6 +34,12 @@ private:
     float _currentLeftUs;
     float _currentRightUs;
     uint32_t _lastUpdateMs;
+
+    // Servo instances using the standard Servo.h library
+    Servo _servoLeft;
+    Servo _servoRight;
+    Servo _servoMosfet;
+    Servo _servoExtra;
 };
 
 #endif

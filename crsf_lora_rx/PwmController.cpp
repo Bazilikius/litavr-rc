@@ -1,8 +1,5 @@
 #include "PwmController.h"
 
-#define PWM_FREQ 50
-#define PWM_RES 14 // 14-bit resolution (0 - 16383)
-
 PwmController::PwmController(uint8_t leftServoPin, uint8_t rightServoPin, uint8_t mosfetPin, uint8_t extraPin, uint8_t ledPin, uint8_t upperSwPin, uint8_t lowerSwPin)
     : _leftServoPin(leftServoPin), _rightServoPin(rightServoPin), _mosfetPin(mosfetPin), _extraPin(extraPin), _ledPin(ledPin), _upperSwPin(upperSwPin), _lowerSwPin(lowerSwPin),
       _currentLeftUs(0.0f), _currentRightUs(0.0f), _lastUpdateMs(0) {}
@@ -25,18 +22,11 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     pinMode(_upperSwPin, INPUT_PULLUP);
     pinMode(_lowerSwPin, INPUT_PULLUP);
 
-    // Setup 50Hz 14-bit PWM on the pins using universally compatible analogWrite API
-    analogWriteFrequency(_leftServoPin, PWM_FREQ);
-    analogWriteResolution(_leftServoPin, PWM_RES);
-
-    analogWriteFrequency(_rightServoPin, PWM_FREQ);
-    analogWriteResolution(_rightServoPin, PWM_RES);
-
-    analogWriteFrequency(_extraPin, PWM_FREQ);
-    analogWriteResolution(_extraPin, PWM_RES);
-
-    analogWriteFrequency(_mosfetPin, PWM_FREQ);
-    analogWriteResolution(_mosfetPin, PWM_RES);
+    // Setup 50Hz PWM on the pins using universally compatible Servo.h library
+    _servoLeft.attach(_leftServoPin);
+    _servoRight.attach(_rightServoPin);
+    _servoExtra.attach(_extraPin);
+    _servoMosfet.attach(_mosfetPin);
 
     // Set starting positions organically based on the Upper Limit Switch state at boot!
     if (isUpperTriggeredAtBoot) {
@@ -139,8 +129,13 @@ void PwmController::updatePwmOutputs(bool isMosfetActive, bool isExtraActive, ui
 }
 
 void PwmController::writeMicros(uint8_t pin, uint32_t us) {
-    // Convert microseconds to duty cycle (14-bit, 50Hz)
-    // 50Hz period is 20000 microseconds. 14-bit max duty is 16383.
-    uint32_t duty = (us * 16383) / 20000;
-    analogWrite(pin, duty);
+    if (pin == _leftServoPin) {
+        _servoLeft.writeMicroseconds(us);
+    } else if (pin == _rightServoPin) {
+        _servoRight.writeMicroseconds(us);
+    } else if (pin == _extraPin) {
+        _servoExtra.writeMicroseconds(us);
+    } else if (pin == _mosfetPin) {
+        _servoMosfet.writeMicroseconds(us);
+    }
 }
