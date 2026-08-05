@@ -25,7 +25,7 @@
 
 CrsfParser parser;
 ConfigManager configManager;
-LoraModule lora(E32_RX_PIN, E32_TX_PIN, E32_M0_PIN, E32_M1_PIN);
+LoraModule lora(Serial1, E32_RX_PIN, E32_TX_PIN, E32_M0_PIN, E32_M1_PIN);
 
 uint32_t byteCount = 0;
 uint32_t packetCount = 0;

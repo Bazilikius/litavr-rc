@@ -51,7 +51,7 @@
 
 ConfigManager configManager;
 PwmController controller(LEFT_SERVO_PIN, RIGHT_SERVO_PIN, MOSFET_PIN, EXTRA_PIN, LED_PIN, UPPER_SW_PIN, LOWER_SW_PIN);
-LoraModule lora(E32_RX_PIN, E32_TX_PIN, E32_M0_PIN, E32_M1_PIN);
+LoraModule lora(Serial2, E32_RX_PIN, E32_TX_PIN, E32_M0_PIN, E32_M1_PIN);
 
 // Global shared variables
 uint32_t packetCount = 0;

@@ -5,8 +5,8 @@
 
 class LoraModule {
 public:
-    LoraModule(uint8_t rxPin, uint8_t txPin, uint8_t m0Pin, uint8_t m1Pin)
-        : _rxPin(rxPin), _txPin(txPin), _m0Pin(m0Pin), _m1Pin(m1Pin), _serial(1) {}
+    LoraModule(HardwareSerial &serial, uint8_t rxPin, uint8_t txPin, uint8_t m0Pin, uint8_t m1Pin)
+        : _serial(serial), _rxPin(rxPin), _txPin(txPin), _m0Pin(m0Pin), _m1Pin(m1Pin) {}
 
     bool begin(uint32_t frequency, uint8_t sck = 0, uint8_t miso = 0, uint8_t mosi = 0) {
         // Set mode pins to Normal Mode (M0=0, M1=0)
@@ -18,7 +18,7 @@ public:
         // Wait for pins to stabilize
         delay(10);
 
-        // Initialize HardwareSerial 1 for Ebyte E32
+        // Initialize pre-instantiated global HardwareSerial reference for Ebyte E32
         _serial.begin(9600, SERIAL_8N1, _rxPin, _txPin);
 
         return true;
@@ -43,11 +43,11 @@ public:
     }
 
 private:
+    HardwareSerial &_serial;
     uint8_t _rxPin;
     uint8_t _txPin;
     uint8_t _m0Pin;
     uint8_t _m1Pin;
-    HardwareSerial _serial;
 };
 
 #endif
