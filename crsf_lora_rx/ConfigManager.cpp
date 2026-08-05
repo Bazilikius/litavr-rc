@@ -9,7 +9,7 @@ ConfigManager::ConfigManager() {
     _currentConfig.servoInvertRight = 0;
     _currentConfig.servoMin = 1000;
     _currentConfig.servoMax = 2000;
-    _currentConfig.servoSpeed = 1000;
+    _currentConfig.servoSpeed = 3000; // Increased default speed to 3000us/sec for faster sweeps
     _currentConfig.loraFreq = 433000000;
     _currentConfig.allOneChannel = 0;
     _currentConfig.mosfetOffLevel = 0;
@@ -28,7 +28,7 @@ void ConfigManager::begin() {
     _currentConfig.servoInvertRight = _prefs.getUChar("srv_inv", 0);
     _currentConfig.servoMin = _prefs.getUShort("srv_min", 1000);
     _currentConfig.servoMax = _prefs.getUShort("srv_max", 2000);
-    _currentConfig.servoSpeed = _prefs.getUShort("srv_spd", 1000);
+    _currentConfig.servoSpeed = _prefs.getUShort("srv_spd", 3000); // Default to 3000us/sec
     _currentConfig.loraFreq = _prefs.getUInt("lora_freq", 433000000);
     _currentConfig.allOneChannel = _prefs.getUChar("all_one", 0);
     _currentConfig.mosfetOffLevel = _prefs.getUChar("mos_off", 0);
@@ -45,7 +45,7 @@ void ConfigManager::begin() {
     if (_currentConfig.servoChannel < 1 || _currentConfig.servoChannel > 16) _currentConfig.servoChannel = 16;
     if (_currentConfig.servoMin < 500 || _currentConfig.servoMin > 2500) _currentConfig.servoMin = 1000;
     if (_currentConfig.servoMax < 500 || _currentConfig.servoMax > 2500) _currentConfig.servoMax = 2000;
-    if (_currentConfig.servoSpeed < 5 || _currentConfig.servoSpeed > 5000) _currentConfig.servoSpeed = 1000;
+    if (_currentConfig.servoSpeed < 5 || _currentConfig.servoSpeed > 10000) _currentConfig.servoSpeed = 3000; // Increased limit to 10000us/sec
 
     if (_currentConfig.loraFreq < 100000000 || _currentConfig.loraFreq > 1000000000) {
         _currentConfig.loraFreq = 433000000;

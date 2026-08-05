@@ -214,7 +214,7 @@ void WebServerHandler::_handleRoot() {
     html += "</div>";
 
     html += "<label for='srv_spd'>Швидкість руху сервоприводів (us/сек):</label>";
-    html += "<input type='number' name='srv_spd' id='srv_spd' value='" + String(config.servoSpeed) + "' min='5' max='5000'>";
+    html += "<input type='number' name='srv_spd' id='srv_spd' value='" + String(config.servoSpeed) + "' min='5' max='10000'>";
 
     html += "<hr>";
 
