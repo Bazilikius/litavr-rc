@@ -2,7 +2,7 @@
 #define PWM_CONTROLLER_H
 
 #include <Arduino.h>
-#include <Servo.h>
+#include <ESP32Servo.h>
 
 class PwmController {
 public:
