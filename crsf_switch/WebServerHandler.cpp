@@ -1,7 +1,7 @@
 #include "WebServerHandler.h"
 
-WebServerHandler::WebServerHandler(ConfigManager &configManager, CrsfParser &parser, uint32_t &byteCount, uint32_t &packetCount)
-    : _configManager(configManager), _parser(parser), _byteCount(byteCount), _packetCount(packetCount), _server(80) {}
+WebServerHandler::WebServerHandler(ConfigManager &configManager, CrsfParser &parser, uint32_t &byteCount, uint32_t &packetCount, uint8_t switchPin, uint8_t servoPin, uint8_t cameraPin)
+    : _configManager(configManager), _parser(parser), _byteCount(byteCount), _packetCount(packetCount), _server(80), _switchPin(switchPin), _servoPin(servoPin), _cameraPin(cameraPin) {}
 
 #include <esp_wifi.h>
 
@@ -100,7 +100,7 @@ void WebServerHandler::_handleRoot() {
     html += "<form action='/save' method='POST'>";
 
     // Switch Channel Dropdown & Limits
-    html += "<h3>1. Switch Output (GPIO 5)</h3>";
+    html += "<h3>1. Switch Output (GPIO " + String(_switchPin) + ")</h3>";
     html += "<label for='switch'>CRSF Channel Map:</label>";
     html += "<select name='switch' id='switch'>";
     for (int i = 1; i <= 16; i++) {
@@ -117,7 +117,7 @@ void WebServerHandler::_handleRoot() {
     html += "<hr>";
 
     // Servo Channel Dropdown & Limits
-    html += "<h3>2. Servo Output (GPIO 4)</h3>";
+    html += "<h3>2. Servo Output (GPIO " + String(_servoPin) + ")</h3>";
     html += "<label for='servo'>CRSF Channel Map:</label>";
     html += "<select name='servo' id='servo'>";
     for (int i = 1; i <= 16; i++) {
@@ -134,7 +134,7 @@ void WebServerHandler::_handleRoot() {
     html += "<hr>";
 
     // Camera Switch Channel Dropdown & Limits
-    html += "<h3>3. Camera Switch Output (GPIO 3)</h3>";
+    html += "<h3>3. Camera Switch Output (GPIO " + String(_cameraPin) + ")</h3>";
     html += "<label for='camera'>CRSF Channel Map:</label>";
     html += "<select name='camera' id='camera'>";
     for (int i = 1; i <= 16; i++) {
@@ -213,9 +213,9 @@ void WebServerHandler::_handleSave() {
             response += "</style></head><body>";
             response += "<div class='message'>";
             response += "<h2>Configuration Saved Successfully!</h2>";
-            response += "<p><b>Switch (GPIO 5):</b> CH" + String(newConfig.switchChannel) + " (" + String(newConfig.switchMin) + "us - " + String(newConfig.switchMax) + "us)</p>";
-            response += "<p><b>Servo (GPIO 4):</b> CH" + String(newConfig.servoChannel) + " (" + String(newConfig.servoMin) + "us - " + String(newConfig.servoMax) + "us)</p>";
-            response += "<p><b>Camera (GPIO 3):</b> CH" + String(newConfig.cameraChannel) + " (" + String(newConfig.cameraMin) + "us - " + String(newConfig.cameraMax) + "us)</p>";
+            response += "<p><b>Switch (GPIO " + String(_switchPin) + "):</b> CH" + String(newConfig.switchChannel) + " (" + String(newConfig.switchMin) + "us - " + String(newConfig.switchMax) + "us)</p>";
+            response += "<p><b>Servo (GPIO " + String(_servoPin) + "):</b> CH" + String(newConfig.servoChannel) + " (" + String(newConfig.servoMin) + "us - " + String(newConfig.servoMax) + "us)</p>";
+            response += "<p><b>Camera (GPIO " + String(_cameraPin) + "):</b> CH" + String(newConfig.cameraChannel) + " (" + String(newConfig.cameraMin) + "us - " + String(newConfig.cameraMax) + "us)</p>";
             response += "<p><b>Baudrate:</b> " + String(newConfig.crsfBaudrate) + " baud</p>";
             response += "<p><strong>Note: Re-applying configuration requires restarting the device.</strong></p>";
             response += "<a href='/'>&larr; Back to configuration</a>";
