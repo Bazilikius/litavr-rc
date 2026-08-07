@@ -22,11 +22,11 @@ void PwmController::begin(bool invertLeft, bool invertRight, uint16_t minUs, uin
     pinMode(_upperSwPin, INPUT_PULLUP);
     pinMode(_lowerSwPin, INPUT_PULLUP);
 
-    // Setup 50Hz PWM on the pins using universally compatible Servo.h library
-    _servoLeft.attach(_leftServoPin);
-    _servoRight.attach(_rightServoPin);
-    _servoExtra.attach(_extraPin);
-    _servoMosfet.attach(_mosfetPin);
+    // Setup 50Hz PWM on the pins using universally compatible Servo.h library with custom limits (500, 2500)
+    _servoLeft.attach(_leftServoPin, 500, 2500);
+    _servoRight.attach(_rightServoPin, 500, 2500);
+    _servoExtra.attach(_extraPin, 500, 2500);
+    _servoMosfet.attach(_mosfetPin, 500, 2500);
 
     // Set starting positions organically based on the Upper Limit Switch state at boot!
     if (isUpperTriggeredAtBoot) {

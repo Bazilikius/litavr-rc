@@ -1,7 +1,7 @@
 /*
  * CRSF to LoRa Transmitter for ESP32 (Dev Module)
- * - Listens to CRSF stream on Serial2 (RX Pin 13 is safe, TX Pin -1 is unused) at CRSF baudrate (default 400000).
- * - Packs 16 channels and broadcasts them over Ebyte E32 UART LoRa module.
+ * - Listens to CRSF stream on Serial1 (RX Pin 13 is safe, TX Pin -1 is unused) at CRSF baudrate (default 400000).
+ * - Packs 16 channels and broadcasts them over Ebyte E32 UART LoRa module on Serial2 (RX=18, TX=19).
  * - Restricts WiFi TX Power to 25% for high efficiency and compliance.
  */
 
@@ -12,12 +12,12 @@
 #include "LoraModule.h"
 #include "WebServerHandler.h"
 
-// Hardware configuration for CRSF (avoiding GPIO 16/17 PSRAM and strapping pins)
-#define CRSF_SERIAL Serial2
+// Hardware configuration for CRSF (using Serial1 on safe, non-conflicting GPIO 13)
+#define CRSF_SERIAL Serial1
 #define CRSF_RX_PIN 13
 #define CRSF_TX_PIN -1
 
-// Ebyte E32 UART & Mode control Pin Configuration
+// Ebyte E32 UART & Mode control Pin Configuration on Serial2 (RX=18, TX=19)
 #define E32_RX_PIN 18  // Connected to E32 TXD
 #define E32_TX_PIN 19  // Connected to E32 RXD
 #define E32_M0_PIN 14  // Connected to E32 M0
@@ -25,7 +25,7 @@
 
 CrsfParser parser;
 ConfigManager configManager;
-LoraModule lora(Serial1, E32_RX_PIN, E32_TX_PIN, E32_M0_PIN, E32_M1_PIN);
+LoraModule lora(Serial2, E32_RX_PIN, E32_TX_PIN, E32_M0_PIN, E32_M1_PIN);
 
 uint32_t byteCount = 0;
 uint32_t packetCount = 0;
@@ -57,7 +57,7 @@ void setup() {
         // Init successful
     }
 
-    // Initialize CRSF Hardware Serial (using GPIO 13 to avoid PSRAM GPIO 16 conflict)
+    // Initialize CRSF Hardware Serial (using GPIO 13 to avoid PSRAM GPIO 16/17 conflict)
     CRSF_SERIAL.begin(activeConfig.crsfBaudrate, SERIAL_8N1, CRSF_RX_PIN, CRSF_TX_PIN);
 
     loraPacket.signature = 0x55AA;

@@ -1,6 +1,6 @@
 /*
  * CRSF LoRa Receiver & Outputs Controller for ESP32 (Dev Module)
- * - Receives channel broadcast from Transmitter via Ebyte E32 UART LoRa Module.
+ * - Receives channel broadcast from Transmitter via Ebyte E32 UART LoRa Module on Serial2 (RX=18, TX=19).
  * - Converts raw CRSF channels (172 - 1811) to standard PWM microseconds (988 - 2012 us).
  * - Controls 2 synchronous servos (Left on GPIO 4, Right on GPIO 13) with Left and Right software inversions.
  * - Monitors up to 3 Limit Switches:
@@ -111,7 +111,8 @@ void setup() {
     pinMode(LOWER_SW_PIN, INPUT_PULLUP);
     pinMode(SERVO_UP_SW_PIN, INPUT_PULLUP);
 
-    delay(2000); // 2-second safe boot delay
+    // 3-second delay to let BEC/battery voltage stabilize completely before starting up
+    delay(3000);
 
     // Initialize Channels array with neutral/mid value
     for (int i = 0; i < 16; i++) {
