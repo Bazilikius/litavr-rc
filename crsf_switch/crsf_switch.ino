@@ -13,13 +13,25 @@
 #include "ConfigManager.h"
 #include "WebServerHandler.h"
 
-// Hardware Pin Configuration
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
+// Hardware Pin Configuration for ESP32-C3 Super Mini
 #define CRSF_SERIAL Serial1
+#define CRSF_SERIAL_NAME "Serial1"
 #define RX_PIN 6
 #define TX_PIN -1 // Receive-only mode: ESP32-C3 only listens to CRSF TX line, does not transmit back
 #define SWITCH_PIN 5
 #define SERVO_PIN 4
 #define CAMERA_PIN 3
+#else
+// Hardware Pin Configuration for Classic ESP32 (e.g. ESP32 Dev Module)
+#define CRSF_SERIAL Serial2
+#define CRSF_SERIAL_NAME "Serial2"
+#define RX_PIN 16
+#define TX_PIN 17 // Standard Serial2 TX pin (or set to -1)
+#define SWITCH_PIN 5
+#define SERVO_PIN 4
+#define CAMERA_PIN 13 // Safe pin for Camera PWM output
+#endif
 
 CrsfParser parser;
 ConfigManager configManager;
@@ -33,7 +45,7 @@ uint16_t lastSwitchVal = 0;
 uint16_t lastServoVal = 0;
 uint16_t lastCameraVal = 0;
 
-WebServerHandler webServer(configManager, parser, byteCount, packetCount);
+WebServerHandler webServer(configManager, parser, byteCount, packetCount, SWITCH_PIN, SERVO_PIN, CAMERA_PIN);
 
 void setup() {
   // Built-in USB CDC Serial
@@ -41,7 +53,11 @@ void setup() {
   delay(3000); // Wait for Serial Monitor
 
   Serial.println("\n=============================================");
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
   Serial.println(" ESP32-C3 CRSF TRIPLE OUTPUT CONTROLLER ");
+#else
+  Serial.println(" ESP32 CLASSIC CRSF TRIPLE OUTPUT CONTROLLER ");
+#endif
   Serial.println("=============================================");
   Serial.printf("Configured Pins: RX=%d, TX=%d, Switch=%d, Servo=%d, Camera=%d\n",
                 RX_PIN, TX_PIN, SWITCH_PIN, SERVO_PIN, CAMERA_PIN);
@@ -54,7 +70,7 @@ void setup() {
   webServer.begin();
 
   // Initialize Hardware UART for CRSF with Dynamic Baudrate
-  Serial.printf("Initializing CRSF on Serial1 at %u baud...\n", activeConfig.crsfBaudrate);
+  Serial.printf("Initializing CRSF on %s at %u baud...\n", CRSF_SERIAL_NAME, activeConfig.crsfBaudrate);
   CRSF_SERIAL.begin(activeConfig.crsfBaudrate, SERIAL_8N1, RX_PIN, TX_PIN);
 
   // Initialize PWM Controllers with Diagnostic Boot Sweeps

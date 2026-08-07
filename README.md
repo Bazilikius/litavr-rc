@@ -2,7 +2,11 @@
 
 This project implements a CRSF (TBS Crossfire) protocol parser for the **ESP32-C3 Super Mini** that parses incoming RC channels, controls three independent PWM outputs (**RC Switch**, **Servo**, and **Camera Switch**), and provides a local **WiFi Web Interface** featuring a live status monitor and highly customizable PWM signal limits for each output.
 
-## Hardware Setup (ESP32-C3 Super Mini)
+## Hardware Setup
+
+This project supports both **ESP32-C3 Super Mini** and classic **ESP32 Dev Module** hardware platforms. The code automatically detects the target platform at compile-time and configures the pin mapping accordingly.
+
+### 1. ESP32-C3 Super Mini Pinout
 
 | Component | Super Mini Pin | Arduino Pin | Note |
 | --- | --- | --- | --- |
@@ -13,6 +17,18 @@ This project implements a CRSF (TBS Crossfire) protocol parser for the **ESP32-C
 | Camera Switch PWM Output | GPIO 3 | 3 | PWM Output (Configurable Channel & Limits) |
 | GND | GND | GND | Common Ground |
 | 5V / VCC | 5V | 5V | Power for ESP32, Receiver, and Servos |
+
+### 2. ESP32 Dev Module (Classic ESP32) Pinout
+
+| Component | ESP32 Dev Pin | Arduino Pin | Note |
+| --- | --- | --- | --- |
+| CRSF RX (From Receiver TX) | GPIO 16 | 16 | Serial2 RX |
+| CRSF TX (To Receiver RX) | GPIO 17 | 17 | Serial2 TX (Unused, Listen-only configuration) |
+| RC Switch PWM Output | GPIO 5 | 5 | PWM Output (Configurable Channel & Limits) |
+| Servo PWM Output | GPIO 4 | 4 | PWM Output (Configurable Channel & Limits) |
+| Camera Switch PWM Output | GPIO 13 | 13 | PWM Output (Configurable Channel & Limits - Safe Pin) |
+| GND | GND | GND | Common Ground |
+| 5V / VCC | 5V / VIN | 5V / VIN | Power for ESP32, Receiver, and Servos |
 
 ## Features
 
