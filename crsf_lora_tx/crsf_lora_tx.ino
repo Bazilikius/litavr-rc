@@ -17,15 +17,13 @@
 #define CRSF_RX_PIN 13
 #define CRSF_TX_PIN -1
 
-// Ebyte E32 UART & Mode control Pin Configuration on Serial2 (RX=18, TX=19)
+// Ebyte E32 UART Pin Configuration on Serial2 (RX=18, TX=19)
 #define E32_RX_PIN 18  // Connected to E32 TXD
 #define E32_TX_PIN 19  // Connected to E32 RXD
-#define E32_M0_PIN 14  // Connected to E32 M0
-#define E32_M1_PIN 21  // Connected to E32 M1
 
 CrsfParser parser;
 ConfigManager configManager;
-LoraModule lora(Serial2, E32_RX_PIN, E32_TX_PIN, E32_M0_PIN, E32_M1_PIN);
+LoraModule lora(Serial2, E32_RX_PIN, E32_TX_PIN);
 
 uint32_t byteCount = 0;
 uint32_t packetCount = 0;

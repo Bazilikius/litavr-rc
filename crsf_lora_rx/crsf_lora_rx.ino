@@ -43,15 +43,13 @@
 #define LOWER_SW_PIN    33 // Lower Limit Switch
 #define SERVO_UP_SW_PIN 25 // 3rd Limit Switch / Servo-UP Override (GPIO 25)
 
-// Ebyte E32 UART & Mode control Pin Configuration on Receiver Board (GPIO 18/19 avoids PSRAM conflict, GPIO 14 avoids strapping GPIO 5)
+// Ebyte E32 UART Pin Configuration on Receiver Board (GPIO 18/19 avoids PSRAM conflict)
 #define E32_RX_PIN 18  // Connected to E32 TXD
 #define E32_TX_PIN 19  // Connected to E32 RXD
-#define E32_M0_PIN 23  // Connected to E32 M0
-#define E32_M1_PIN 14  // Connected to E32 M1
 
 ConfigManager configManager;
 PwmController controller(LEFT_SERVO_PIN, RIGHT_SERVO_PIN, MOSFET_PIN, EXTRA_PIN, LED_PIN, UPPER_SW_PIN, LOWER_SW_PIN);
-LoraModule lora(Serial2, E32_RX_PIN, E32_TX_PIN, E32_M0_PIN, E32_M1_PIN);
+LoraModule lora(Serial2, E32_RX_PIN, E32_TX_PIN);
 
 // Global shared variables
 uint32_t packetCount = 0;
